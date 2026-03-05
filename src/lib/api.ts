@@ -1,4 +1,4 @@
-import { supabase } from "@/supabaseClient";
+import { supabase } from "@/lib/supabase";
 
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const { data } = await supabase.auth.getSession();

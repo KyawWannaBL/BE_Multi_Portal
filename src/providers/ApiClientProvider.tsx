@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import { supabase } from '@/supabaseClient';
+import { supabase } from '@/lib/supabase';
 
 type ApiContextType = {
   apiFetch: (endpoint: string, options?: RequestInit) => Promise<any>;

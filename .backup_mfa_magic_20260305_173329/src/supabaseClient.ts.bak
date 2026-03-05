@@ -1,17 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 
-// We are providing your exact URL as a hardcoded fallback.
-// This bypasses Vercel entirely if it fails to inject the variable.
-const supabaseUrl = (
-  import.meta.env.VITE_SUPABASE_PROJECT_URL ||
+/**
+ * EN: Safe Supabase client that never crashes when env is missing.
+ * MY: Env မရှိလည်း app မပျက်အောင် safe Supabase client
+ */
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL ||
   import.meta.env.VITE_SUPABASE_URL ||
-  "https://dltavabvjwocknkyvwgz.supabase.co"
-) as string;
+  "") as string;
 
-// The key REMAINS an environment variable because it is a secret.
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "") as string;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+type SupabaseResult<T> = Promise<{ data: T | null; error: any | null }>;
 
 function configError() {
   return { name: "SupabaseConfigError", message: "Supabase env is missing." };

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { supabase } from "@/supabaseClient";
+import { supabase } from "@/lib/supabase";
 
 type AuthUser = {
   id: string;

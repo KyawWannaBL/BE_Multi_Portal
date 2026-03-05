@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import { getCurrentIdentity } from "@/lib/appIdentity";
 import { getEffectivePermissions, normalizeRole } from "@/lib/rbac";
 
