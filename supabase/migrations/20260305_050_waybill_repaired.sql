@@ -1,5 +1,4 @@
--- 2026-03-05: Repaired Waybill & CSV Engine
--- EN: Uses verified current_app_role() and jwt email helpers.
+-- 2026-03-05: Repaired Waybill Engine
 BEGIN;
 
 -- FIX: Waybill ID Generator (ORG + SEQ + TAG + DATE + DEST)
@@ -9,13 +8,13 @@ CREATE OR REPLACE FUNCTION public.generate_waybill_id(
 DECLARE
   seq_val text;
 BEGIN
-  -- Generate simple 6-digit sequence for this session
+  -- Generate simple 6-digit sequence
   seq_val := lpad(floor(random() * 900000 + 100000)::text, 6, '0');
   RETURN upper(p_org) || seq_val || upper(p_tag) || to_char(now(), 'DDMMYYYY') || upper(p_dst);
 END;
 $$ LANGUAGE plpgsql;
 
--- FIX: Bulk Create RPC with schema-safe role checks
+-- FIX: Bulk Create RPC for Portals
 CREATE OR REPLACE FUNCTION public.create_shipment_portal(
   p_receiver_name text, p_receiver_phone text, p_receiver_city text, p_item_price numeric
 ) RETURNS TABLE(shipment_id uuid, way_id text) AS $$

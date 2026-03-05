@@ -6,6 +6,7 @@ import { RequireRole } from "@/routes/RequireRole";
 
 // Layouts & Base Pages
 import Login from "./pages/Login";
+import WaybillCenterPage from "@/pages/portals/operations/WaybillCenterPage";
 import DashboardRedirect from "./pages/DashboardRedirect";
 import Unauthorized from "./pages/Unauthorized";
 
