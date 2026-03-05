@@ -1,9 +1,9 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, isSupabaseConfigured } from "@/supabaseClient";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -121,7 +121,7 @@ export default function Login() {
           
           url.searchParams.delete("code");
           window.history.replaceState({}, document.title, url.toString());
-          await auth.refresh();
+          if (auth?.refresh) await auth.refresh();
         }
 
         // 2. Check for active session
@@ -163,8 +163,8 @@ export default function Login() {
 
   async function routeAfterAuth(userId: string) {
     const profile = await loadProfile(userId);
-    const role = normRole(profile?.role || profile?.role_code || profile?.app_role || profile?.user_role || auth.role);
-    const mustChange = Boolean(profile?.must_change_password) || Boolean(profile?.requires_password_change) || Boolean(auth.mustChangePassword);
+    const role = normRole(profile?.role || profile?.role_code || profile?.app_role || profile?.user_role || auth?.role);
+    const mustChange = Boolean(profile?.must_change_password) || Boolean(profile?.requires_password_change) || Boolean(auth?.mustChangePassword);
 
     if (mustChange) {
       setIsBooting(false);
@@ -183,19 +183,21 @@ export default function Login() {
     navigate(fromPath || portalForRole(role), { replace: true });
   }
 
-  // ... [Handlers kept exactly the same from your script] ...
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
     clearMessages();
     if (configMissing) return setErrorMsg(t("System configuration missing.", "System config မပြည့်စုံပါ။"));
     setLoading(true);
     try {
+      if (!auth?.login) throw new Error("Auth context missing");
       const res = await auth.login(email, password);
       if (!res.success) throw new Error(res.message || "Invalid credentials.");
-      await auth.refresh();
+      
+      if (auth?.refresh) await auth.refresh();
       const { data } = await supabase.auth.getSession();
       const uid = data?.session?.user?.id;
       if (!uid) throw new Error("No session.");
+      
       await routeAfterAuth(uid);
     } catch {
       setErrorMsg(t("Access Denied: Invalid credentials.", "ဝင်ရောက်ခွင့် ငြင်းပယ်ခံရသည်: အချက်အလက်မှားနေသည်။"));
@@ -227,10 +229,12 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.verifyOtp({ email, token: otpToken.trim(), type: "email" });
       if (error) throw error;
-      await auth.refresh();
+      
+      if (auth?.refresh) await auth.refresh();
       const { data } = await supabase.auth.getSession();
       const uid = data?.session?.user?.id;
       if (!uid) throw new Error("No session.");
+      
       await routeAfterAuth(uid);
     } catch (e: any) {
       setErrorMsg(e?.message || t("Invalid OTP code.", "OTP code မမှန်ပါ။"));
@@ -277,13 +281,16 @@ export default function Login() {
     try {
       const { data, error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
+      
       const uid = data?.user?.id;
       if (uid) {
         try { await supabase.from("profiles").update({ must_change_password: false }).eq("id", uid); } catch {}
         try { await supabase.from("profiles").update({ requires_password_change: false }).eq("id", uid); } catch {}
       }
+      
       setSuccessMsg(t("Password updated. Redirecting…", "စကားဝှက် ပြောင်းပြီးပါပြီ။ ဆက်သွားနေသည်…"));
-      await auth.refresh();
+      if (auth?.refresh) await auth.refresh();
+      
       const { data: sess } = await supabase.auth.getSession();
       const userId = sess?.session?.user?.id;
       if (userId) await routeAfterAuth(userId);
@@ -342,12 +349,14 @@ export default function Login() {
     try {
       const mfa = supabase.auth.mfa;
       if (!mfa?.enroll) return setErrorMsg(t("MFA enrollment unavailable in this build.", "ဤ build တွင် MFA enrollment မရနိုင်ပါ။"));
+      
       const { data, error } = await mfa.enroll({ factorType: "totp" });
       if (error) throw error;
 
       setMfaFactorId(data.id);
       setMfaQr(data.totp?.qr_code || data.qr_code || null);
       setMfaSecret(data.totp?.secret || data.secret || null);
+      
       setView("mfa_enroll");
       setSuccessMsg(t("Scan QR, then enter the 6-digit code.", "QR စကန်ပြီး ၆ လုံးကုဒ် ထည့်ပါ။"));
     } catch (e: any) {
@@ -377,7 +386,8 @@ export default function Login() {
       }
 
       setSuccessMsg(t("MFA verified. Redirecting…", "MFA အတည်ပြုပြီးပါပြီ။ ဆက်သွားနေသည်…"));
-      await auth.refresh();
+      
+      if (auth?.refresh) await auth.refresh();
       const { data } = await supabase.auth.getSession();
       const uid = data?.session?.user?.id;
       if (uid) await routeAfterAuth(uid);
@@ -401,9 +411,6 @@ export default function Login() {
       </div>
 
       {isBooting ? (
-        // ==========================================
-        //  THE HTML-STYLE BOOT SEQUENCE
-        // ==========================================
         <div className="relative z-10 w-full max-w-md p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[18px] p-5 shadow-2xl border border-slate-200 flex flex-col gap-4 relative overflow-hidden">
             <div className="flex gap-4 items-center">
@@ -450,9 +457,6 @@ export default function Login() {
           </div>
         </div>
       ) : (
-        // ==========================================
-        //  THE MAIN MFA ENTERPRISE LOGIN UI
-        // ==========================================
         <div className="relative z-10 w-full max-w-md space-y-6 animate-in slide-in-from-bottom-4 duration-500">
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 shadow-2xl overflow-hidden">
