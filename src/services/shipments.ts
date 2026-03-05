@@ -1,221 +1,61 @@
 import { supabase } from "@/lib/supabase";
-import { getCurrentIdentity } from "@/lib/appIdentity";
-import { assertOk } from "@/services/supabaseHelpers";
-
-export type Shipment = {
-  id: string;
-  way_id: string;
-  merchant_id: string;
-  receiver_name: string;
-  receiver_phone: string;
-  receiver_address: string;
-  pickup_branch_id: string | null;
-  delivery_branch_id: string | null;
-  assigned_rider_id: string | null;
-  created_at: string;
-  actual_pickup_time: string | null;
-  actual_delivery_time: string | null;
-  cod_amount: number | null;
-  total_amount: number | null;
-};
-
-export type ShipmentTracking = {
-  id: string;
-  shipment_id: string;
-  status: string;
-  location: string | null;
-  notes: string | null;
-  timestamp: string;
-};
 
 export async function createShipment(input: {
+  // sender optional (merchant auto-detected by email)
+  sender_name?: string;
+  sender_phone?: string;
+  sender_address?: string;
+  sender_city?: string;
+  sender_state?: string;
+
   receiver_name: string;
   receiver_phone: string;
   receiver_address: string;
   receiver_city: string;
-  receiver_state: string;
-  package_description?: string;
-  package_weight?: number;
+  receiver_state?: string;
+
+  item_price: number;
   delivery_fee: number;
   cod_amount?: number;
-  pickup_branch_id?: string | null;
-  delivery_branch_id?: string | null;
-}): Promise<{ shipmentId: string; wayId: string }> {
-  const identity = await getCurrentIdentity();
-  if (!identity?.merchant_id) throw new Error("No linked merchant_id for this account.");
-  const wayId = `BTX-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-
-  // Pull sender defaults from merchant record when possible
-  const { data: mer } = await supabase.from("merchants").select("business_name, phone, email, address, city, state, contact_person").eq("id", identity.merchant_id).maybeSingle();
-
-  const senderName = mer?.contact_person || mer?.business_name || "Merchant";
-  const senderPhone = mer?.phone || "";
-  const senderAddress = mer?.address || "";
-  const senderCity = mer?.city || "";
-  const senderState = mer?.state || "";
-
-  const total = Number(input.delivery_fee) + Number(input.cod_amount || 0);
-
-  const insert = await supabase
-    .from("shipments")
-    .insert({
-      way_id: wayId,
-      merchant_id: identity.merchant_id,
-      sender_name: senderName,
-      sender_phone: senderPhone,
-      sender_address: senderAddress,
-      sender_city: senderCity,
-      sender_state: senderState,
-      receiver_name: input.receiver_name,
-      receiver_phone: input.receiver_phone,
-      receiver_address: input.receiver_address,
-      receiver_city: input.receiver_city,
-      receiver_state: input.receiver_state,
-      pickup_branch_id: input.pickup_branch_id ?? null,
-      delivery_branch_id: input.delivery_branch_id ?? null,
-      package_description: input.package_description ?? null,
-      package_weight: input.package_weight ?? null,
-      delivery_fee: input.delivery_fee,
-      cod_amount: input.cod_amount ?? 0,
-      insurance_fee: 0,
-      total_amount: total,
-      created_by: identity.user_id ?? null,
-    })
-    .select("id, way_id")
-    .single();
-
-  const row = assertOk(insert, "Create shipment failed");
-
-  // Tracking entry (avoid enum mismatch by using 'pending' always; put real state in notes)
-  await supabase.from("shipment_tracking").insert({
-    shipment_id: row.id,
-    status: "pending",
-    notes: "Shipment created (awaiting supervisor approval)",
-    handled_by: identity.user_id ?? null,
-    is_customer_visible: true,
-  });
-
-  // Create approval request (migration adds this table)
-  await supabase.from("shipment_approvals").insert({
-    shipment_id: row.id,
-    status: "PENDING",
-    requested_by: identity.user_id ?? null,
-  });
-
-  return { shipmentId: row.id, wayId: row.way_id };
-}
-
-export async function listMerchantShipments(): Promise<Shipment[]> {
-  const identity = await getCurrentIdentity();
-  if (!identity?.merchant_id) return [];
-
-  const res = await supabase
-    .from("shipments")
-    .select("id, way_id, merchant_id, receiver_name, receiver_phone, receiver_address, pickup_branch_id, delivery_branch_id, assigned_rider_id, created_at, actual_pickup_time, actual_delivery_time, cod_amount, total_amount")
-    .eq("merchant_id", identity.merchant_id)
-    .order("created_at", { ascending: false });
-
-  return assertOk(res as any, "Load merchant shipments failed") as any;
-}
-
-export async function listAssignedShipments(): Promise<Shipment[]> {
-  const identity = await getCurrentIdentity();
-  if (!identity?.user_id) return [];
-
-  const res = await supabase
-    .from("shipments")
-    .select("id, way_id, merchant_id, receiver_name, receiver_phone, receiver_address, pickup_branch_id, delivery_branch_id, assigned_rider_id, created_at, actual_pickup_time, actual_delivery_time, cod_amount, total_amount")
-    .eq("assigned_rider_id", identity.user_id)
-    .order("created_at", { ascending: false });
-
-  return assertOk(res as any, "Load assigned shipments failed") as any;
-}
-
-export async function assignShipment(shipmentId: string, assigneeUserId: string) {
-  const res = await supabase
-    .from("shipments")
-    .update({ assigned_rider_id: assigneeUserId })
-    .eq("id", shipmentId)
-    .select("id")
-    .single();
-
-  assertOk(res as any, "Assign shipment failed");
-}
-
-export async function addTrackingNote(shipmentId: string, note: string, isCustomerVisible = true) {
-  const identity = await getCurrentIdentity();
-  const res = await supabase.from("shipment_tracking").insert({
-    shipment_id: shipmentId,
-    status: "pending",
-    notes: note,
-    handled_by: identity?.user_id ?? null,
-    is_customer_visible: isCustomerVisible,
-  });
-  assertOk(res as any, "Add tracking note failed");
-}
-
-export async function markPickedUp(shipmentId: string) {
-  await supabase.from("shipments").update({ actual_pickup_time: new Date().toISOString() }).eq("id", shipmentId);
-  await addTrackingNote(shipmentId, "Picked up by delivery team");
-}
-
-export async function markDelivered(shipmentId: string) {
-  await supabase.from("shipments").update({ actual_delivery_time: new Date().toISOString() }).eq("id", shipmentId);
-  await addTrackingNote(shipmentId, "Delivered to receiver");
-}
-
-export async function findShipmentByWayId(wayId: string): Promise<Shipment | null> {
-  const res = await supabase
-    .from("shipments")
-    .select("id, way_id, merchant_id, receiver_name, receiver_phone, receiver_address, pickup_branch_id, delivery_branch_id, assigned_rider_id, created_at, actual_pickup_time, actual_delivery_time, cod_amount, total_amount")
-    .eq("way_id", wayId)
-    .maybeSingle();
-  return (res.data as any) ?? null;
-}
-
-export async function listTracking(shipmentId: string): Promise<ShipmentTracking[]> {
-  const res = await supabase
-    .from("shipment_tracking")
-    .select("id, shipment_id, status, location, notes, timestamp")
-    .eq("shipment_id", shipmentId)
-    .order("timestamp", { ascending: false });
-  return assertOk(res as any, "Load tracking failed") as any;
-}
-
-/**
- * EN: Data Entry shipment creation (no merchant_id required).
- * MY: Data Entry အတွက် shipment ဖန်တီးခြင်း (merchant_id မလို)
- */
-export async function createShipmentDataEntry(input: {
-  receiver_name: string;
-  receiver_phone: string;
-  receiver_address: string;
-  receiver_city: string;
-  receiver_state: string;
-  delivery_fee: number;
-  cod_amount?: number;
-  pickup_branch_id?: string | null;
-  delivery_branch_id?: string | null;
-  package_description?: string | null;
   package_weight?: number | null;
+  cbm?: number;
+  delivery_type?: string;
+  remarks?: string;
+
+  pickup_branch_id?: string | null;
+  delivery_branch_id?: string | null;
 }): Promise<{ shipmentId: string; wayId: string }> {
-  const res = await supabase.rpc("create_shipment_data_entry", {
+  const { data, error } = await supabase.rpc("create_shipment_portal", {
+    p_sender_name: input.sender_name ?? null,
+    p_sender_phone: input.sender_phone ?? null,
+    p_sender_address: input.sender_address ?? null,
+    p_sender_city: input.sender_city ?? null,
+    p_sender_state: input.sender_state ?? null,
+
     p_receiver_name: input.receiver_name,
     p_receiver_phone: input.receiver_phone,
     p_receiver_address: input.receiver_address,
     p_receiver_city: input.receiver_city,
-    p_receiver_state: input.receiver_state,
+    p_receiver_state: input.receiver_state ?? "MM",
+
+    p_item_price: Number(input.item_price || 0),
     p_delivery_fee: Number(input.delivery_fee || 0),
     p_cod_amount: Number(input.cod_amount || 0),
+    p_package_weight: input.package_weight ?? null,
+    p_cbm: Number(input.cbm ?? 1),
+    p_delivery_type: input.delivery_type ?? "Normal",
+    p_remarks: input.remarks ?? null,
+
     p_pickup_branch_id: input.pickup_branch_id ?? null,
     p_delivery_branch_id: input.delivery_branch_id ?? null,
-    p_package_description: input.package_description ?? null,
-    p_package_weight: input.package_weight ?? null,
   });
 
-  if ((res as any).error) throw new Error((res as any).error.message);
-
-  const row = Array.isArray((res as any).data) ? (res as any).data[0] : (res as any).data;
-  if (!row?.shipment_id || !row?.way_id) throw new Error("RPC returned no shipment_id/way_id");
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
   return { shipmentId: row.shipment_id, wayId: row.way_id };
+}
+
+// Backward compat alias (Data Entry uses same RPC)
+export async function createShipmentDataEntry(input: Parameters<typeof createShipment>[0]) {
+  return createShipment(input);
 }
