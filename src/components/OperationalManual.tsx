@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Camera, CheckCircle, Package, QrCode, Smartphone, Users, Download, Loader2 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAuth } from "@/state/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
