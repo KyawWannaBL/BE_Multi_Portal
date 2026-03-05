@@ -4,7 +4,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { RequireAuth } from "@/routes/RequireAuth";
 import { RequireRole } from "@/routes/RequireRole";
 import Login from "./pages/Login";
-import SignUp from "./pages/SignUp";
+import Signup from "./pages/SignUp";
 import ResetPassword from "./pages/ResetPassword";
 import DashboardRedirect from "./pages/DashboardRedirect";
 import ExecutiveCommandCenter from "@/pages/portals/admin/ExecutiveCommandCenter";
@@ -16,7 +16,7 @@ export default function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<SignUp />} />
+            <Route path="/signup" element={<Signup />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route element={<RequireAuth />}>
