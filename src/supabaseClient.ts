@@ -1,9 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL ||
+// We are providing your exact URL as a hardcoded fallback.
+// This bypasses Vercel entirely if it fails to inject the variable.
+const supabaseUrl = (
+  import.meta.env.VITE_SUPABASE_PROJECT_URL ||
   import.meta.env.VITE_SUPABASE_URL ||
-  "") as string;
+  "https://dltavabvjwocknkyvwgz.supabase.co"
+) as string;
 
+// The key REMAINS an environment variable because it is a secret.
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "") as string;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
