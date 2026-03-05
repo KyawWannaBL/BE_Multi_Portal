@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 
 import AdminLayout from "./components/AdminLayout";
-import Login from "./pages/Login";
+import Login from "./pages/LoginPage";
 import Unauthorized from "./pages/Unauthorized";
 import DashboardRedirect from "./pages/DashboardRedirect";
 
