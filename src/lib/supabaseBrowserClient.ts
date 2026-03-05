@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 /**
  * Browser-only Supabase client singleton.
  * Uses NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
- * This file never creates users; it only reads the currently authenticated session.
+ * Persistent session enabled to avoid repeated logins.
  */
 let _client: SupabaseClient | null = null;
 
@@ -20,7 +20,8 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: true,
+        storage: window.localStorage
       }
     });
   }

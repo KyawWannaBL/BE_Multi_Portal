@@ -3,11 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { RequireAuth } from "@/routes/RequireAuth";
 import { RequireRole } from "@/routes/RequireRole";
-
 import Login from "./pages/Login";
 import DashboardRedirect from "./pages/DashboardRedirect";
-import WaybillCenterPage from "@/pages/portals/operations/WaybillCenterPage";
-import OperationsPortal from "@/pages/portals/OperationsPortal";
+import ExecutiveCommandCenter from "@/pages/portals/admin/ExecutiveCommandCenter";
 
 export default function App() {
   return (
@@ -18,8 +16,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route element={<RequireAuth />}>
               <Route path="/" element={<DashboardRedirect />} />
-              <Route path="/portal/operations" element={<RequireRole allow={["OPERATIONS_ADMIN", "DATA_ENTRY"]}><OperationsPortal /></RequireRole>} />
-              <Route path="/portal/operations/waybills" element={<RequireRole allow={["SUPER_ADMIN", "OPERATIONS_ADMIN", "DATA_ENTRY"]}><WaybillCenterPage /></RequireRole>} />
+              <Route path="/portal/admin/executive" element={<RequireRole allow={["SUPER_ADMIN", "SYS"]}><ExecutiveCommandCenter /></RequireRole>} />
             </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>

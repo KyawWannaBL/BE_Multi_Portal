@@ -59,3 +59,14 @@ export async function createShipment(input: {
 export async function createShipmentDataEntry(input: Parameters<typeof createShipment>[0]) {
   return createShipment(input);
 }
+
+export async function listAssignedShipments(riderId: string) {
+  const { data, error } = await supabase
+    .from("shipments")
+    .select("*")
+    .eq("assigned_rider_id", riderId)
+    .order("created_at", { ascending: false });
+  
+  if (error) throw error;
+  return data;
+}

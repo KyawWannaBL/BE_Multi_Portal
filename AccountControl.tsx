@@ -11,7 +11,6 @@ import {
   Download,
   FileText,
   History,
-  Import,
   Key,
   Lock,
   RefreshCw,
@@ -25,6 +24,13 @@ import {
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowserClient';
+import {
+  authenticateWithPasskey,
+  canUsePlatformAuthenticator,
+  isWebAuthnSupported,
+  registerPlatformPasskey,
+  type PasskeyCredential
+} from '@/lib/webauthn';
 
 type Role = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 type AccountStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REJECTED' | 'ARCHIVED';
@@ -62,6 +68,22 @@ const PERMISSIONS: PermissionMeta[] = [
   { code: 'CSV_EXPORT', label_en: 'CSV export', label_mm: 'CSV ထုတ်ရန်' }
 ];
 
+type AccountSecurity = {
+  onboardingTokenHash?: string;
+  onboardingTokenIssuedAt?: string;
+  onboardingTokenExpiresAt?: string;
+  blockedAt?: string;
+  blockedBy?: string;
+
+  /**
+   * Passkeys are device-bound.
+   * In this demo we store credential IDs in the local registry.
+   * For real enterprise, store + verify server-side.
+   */
+  passkeys?: PasskeyCredential[];
+  biometricGateEnabled?: boolean; // Require fingerprint to unlock THIS UI on this device/session
+};
+
 type Account = {
   id: string;
   name: string;
@@ -85,13 +107,7 @@ type Account = {
     note?: string;
   };
 
-  security?: {
-    onboardingTokenHash?: string;
-    onboardingTokenIssuedAt?: string;
-    onboardingTokenExpiresAt?: string;
-    blockedAt?: string;
-    blockedBy?: string;
-  };
+  security?: AccountSecurity;
 
   docs?: { title: string; url: string }[];
 };
@@ -113,14 +129,6 @@ type AuditEvent = {
   action: string;
   targetEmail?: string;
   detail?: string;
-};
-
-type StoreV1 = {
-  v: 1;
-  accounts: Account[];
-  grants: AuthorityGrant[];
-  audit: AuditEvent[];
-  actingAsEmail: string;
 };
 
 type Store = {
@@ -218,23 +226,16 @@ function seedStoreV2(): Store {
   };
 }
 
-function migrate(raw: unknown): Store {
-  const s = raw as Partial<Store> & Partial<StoreV1>;
-  if (s?.v === 2 && Array.isArray(s.accounts) && Array.isArray(s.grants) && Array.isArray(s.audit)) {
-    return s as Store;
-  }
-  if (s?.v === 1 && Array.isArray(s.accounts) && Array.isArray(s.grants) && Array.isArray(s.audit)) {
-    return { v: 2, accounts: s.accounts as Account[], grants: s.grants as AuthorityGrant[], audit: s.audit as AuditEvent[] };
-  }
-  return seedStoreV2();
-}
-
 function loadStore(): Store {
   if (typeof window === 'undefined') return seedStoreV2();
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedStoreV2();
-    return migrate(JSON.parse(raw));
+    const s = JSON.parse(raw) as Store;
+    if (!s?.accounts || !Array.isArray(s.accounts)) return seedStoreV2();
+    if (!s?.grants || !Array.isArray(s.grants)) return seedStoreV2();
+    if (!s?.audit || !Array.isArray(s.audit)) return seedStoreV2();
+    return { ...s, v: 2 };
   } catch {
     return seedStoreV2();
   }
@@ -367,10 +368,9 @@ function Modal(props: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
-  footer?: React.ReactNode;
   widthClass?: string;
 }) {
-  const { open, title, onClose, children, footer, widthClass } = props;
+  const { open, title, onClose, children, widthClass } = props;
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -413,14 +413,17 @@ function Modal(props: {
           </Button>
         </div>
         <div className="p-6">{children}</div>
-        {footer ? <div className="p-6 border-t border-white/5 flex items-center justify-end gap-3">{footer}</div> : null}
       </div>
     </div>
   );
 }
 
 function Pill(props: { children: React.ReactNode; className?: string }) {
-  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black tracking-tighter ${props.className ?? ''}`}>{props.children}</span>;
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black tracking-tighter ${props.className ?? ''}`}>
+      {props.children}
+    </span>
+  );
 }
 
 function Field(props: { label: string; hint?: string; children: React.ReactNode }) {
@@ -471,10 +474,18 @@ function tFactory(lang: string) {
   const dict = {
     title: { en: 'Account Control', mm: 'အကောင့်ထိန်းချုပ်မှု' },
     subtitle: { en: 'Enterprise Identity Governance', mm: 'လုပ်ငန်းသုံး Identity Governance' },
+
     signedInAs: { en: 'Signed in as', mm: 'အကောင့်ဖြင့်ဝင်ထားသည်' },
     notSignedIn: { en: 'Not signed in', mm: 'ဝင်မထားပါ' },
     missingEnv: { en: 'Missing Supabase env', mm: 'Supabase env မရှိပါ' },
     sessionUnregistered: { en: 'Session user not registered in Account Registry', mm: 'Session user သည် Registry ထဲတွင် မရှိပါ' },
+
+    biometric: { en: 'Fingerprint / Passkey', mm: 'လက်ဗွေ / Passkey' },
+    biometric_enable: { en: 'Enable fingerprint unlock', mm: 'လက်ဗွေဖြင့် ဖွင့်နိုင်အောင်လုပ်မည်' },
+    biometric_gate: { en: 'Require fingerprint to open this screen', mm: 'ဒီစခရင်ကို လက်ဗွေဖြင့်သာ ဖွင့်မည်' },
+    biometric_unlock: { en: 'Unlock with fingerprint', mm: 'လက်ဗွေဖြင့် ဖွင့်မည်' },
+    biometric_not_supported: { en: 'This device/browser does not support fingerprint passkeys.', mm: 'ဒီဖုန်း/ဘရောက်ဆာမှာ Passkey(လက်ဗွေ) မထောက်ပံ့ပါ။' },
+    biometric_no_passkey: { en: 'No passkey registered yet.', mm: 'Passkey မရှိသေးပါ။' },
 
     search: { en: 'Search accounts...', mm: 'အကောင့်ရှာရန်...' },
     create: { en: 'Create Account', mm: 'အကောင့်အသစ်ဖွင့်မည်' },
@@ -539,8 +550,6 @@ function tFactory(lang: string) {
     bulk_approve: { en: 'Approve', mm: 'အတည်ပြု' },
     bulk_reject: { en: 'Reject', mm: 'ငြင်းပယ်' },
 
-    csv_accounts: { en: 'Accounts CSV', mm: 'Accounts CSV' },
-    csv_grants: { en: 'Authorities CSV', mm: 'Authorities CSV' },
     csv_template: { en: 'Download template', mm: 'Template ဒေါင်းလုပ်' },
 
     msg_saved: { en: 'Saved.', mm: 'သိမ်းပြီးပါပြီ။' },
@@ -585,6 +594,10 @@ export default function AccountControl() {
 
   const roles = useMemo(() => normalizeRoleList(), []);
 
+  // Biometric gate state
+  const [platformAuthAvailable, setPlatformAuthAvailable] = useState<boolean>(false);
+  const [biometricUnlocked, setBiometricUnlocked] = useState<boolean>(true);
+
   useEffect(() => {
     persistStore(store);
   }, [store]);
@@ -595,11 +608,16 @@ export default function AccountControl() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  /**
-   * Supabase session connection:
-   * - Reads currently authenticated user email.
-   * - No new users are created here.
-   */
+  useEffect(() => {
+    (async () => {
+      if (!isWebAuthnSupported()) {
+        setPlatformAuthAvailable(false);
+        return;
+      }
+      setPlatformAuthAvailable(await canUsePlatformAuthenticator());
+    })();
+  }, []);
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
@@ -642,6 +660,19 @@ export default function AccountControl() {
 
   const actor = useMemo(() => (actorEmail ? getAccountByEmail(store.accounts, actorEmail) : undefined), [store.accounts, actorEmail]);
   const actorPerms = useMemo(() => effectivePermissions(store, actor), [store, actor]);
+  const sessionRegistered = authState !== 'OK' ? false : !!actor;
+
+  // Decide if biometric gate should lock the UI
+  useEffect(() => {
+    if (!sessionRegistered || !actor) {
+      setBiometricUnlocked(true);
+      return;
+    }
+    const gateEnabled = !!actor.security?.biometricGateEnabled;
+    const hasPasskey = (actor.security?.passkeys?.length ?? 0) > 0;
+    if (gateEnabled && hasPasskey) setBiometricUnlocked(false);
+    else setBiometricUnlocked(true);
+  }, [sessionRegistered, actorEmail, actor?.security?.biometricGateEnabled, actor?.security?.passkeys?.length]);
 
   function auditPush(event: Omit<AuditEvent, 'id' | 'at' | 'actorEmail'> & { actorEmail?: string }) {
     const a = event.actorEmail ?? actorEmail ?? 'UNKNOWN';
@@ -655,8 +686,6 @@ export default function AccountControl() {
     };
     setStore((prev) => ({ ...prev, audit: [e, ...prev.audit].slice(0, 500) }));
   }
-
-  const sessionRegistered = authState !== 'OK' ? false : !!actor;
 
   const canRead = sessionRegistered && can(store, actor, 'USER_READ');
   const canCreate = sessionRegistered && can(store, actor, 'USER_CREATE');
@@ -704,6 +733,88 @@ export default function AccountControl() {
     return superAdmins.length >= 1;
   }
 
+  // ---------- Biometric (Passkey) ----------
+  async function registerMyPasskey() {
+    if (!actor || !actorEmail) return;
+    if (!platformAuthAvailable) {
+      setToast({ type: 'err', msg: t('biometric_not_supported') });
+      return;
+    }
+
+    try {
+      const existing = actor.security?.passkeys?.map((p) => p.id) ?? [];
+      const passkey = await registerPlatformPasskey({
+        rpName: 'Britium Enterprise',
+        userEmail: actorEmail,
+        userDisplayName: actor.name || actorEmail,
+        excludeCredentialIds: existing
+      });
+
+      const next: Account = {
+        ...actor,
+        security: {
+          ...(actor.security ?? {}),
+          passkeys: [passkey, ...(actor.security?.passkeys ?? [])],
+          biometricGateEnabled: true // default ON to match your request
+        }
+      };
+      upsertAccount(next);
+      auditPush({ action: 'PASSKEY_REGISTERED', targetEmail: actorEmail, detail: `id=${passkey.id.slice(0, 10)}...` });
+      setToast({ type: 'ok', msg: t('msg_saved') });
+    } catch {
+      setToast({ type: 'err', msg: t('msg_failed') });
+    }
+  }
+
+  async function unlockWithFingerprint() {
+    if (!actor || !actorEmail) return;
+    const id = actor.security?.passkeys?.[0]?.id;
+    if (!id) {
+      setToast({ type: 'err', msg: t('biometric_no_passkey') });
+      return;
+    }
+    try {
+      const ok = await authenticateWithPasskey({ credentialId: id });
+      if (!ok) {
+        setToast({ type: 'err', msg: t('msg_failed') });
+        auditPush({ action: 'BIOMETRIC_UNLOCK_FAIL', targetEmail: actorEmail });
+        return;
+      }
+      setBiometricUnlocked(true);
+      auditPush({ action: 'BIOMETRIC_UNLOCK_OK', targetEmail: actorEmail });
+      setToast({ type: 'ok', msg: t('msg_saved') });
+    } catch {
+      setToast({ type: 'err', msg: t('msg_failed') });
+      auditPush({ action: 'BIOMETRIC_UNLOCK_FAIL', targetEmail: actorEmail });
+    }
+  }
+
+  function toggleBiometricGate(enabled: boolean) {
+    if (!actor) return;
+    const next: Account = {
+      ...actor,
+      security: {
+        ...(actor.security ?? {}),
+        biometricGateEnabled: enabled
+      }
+    };
+    upsertAccount(next);
+    auditPush({ action: enabled ? 'BIOMETRIC_GATE_ENABLED' : 'BIOMETRIC_GATE_DISABLED', targetEmail: actor.email });
+    setToast({ type: 'ok', msg: t('msg_saved') });
+  }
+
+  async function signOut() {
+    const supabase = getSupabaseBrowserClient();
+    try {
+      await supabase?.auth.signOut();
+    } finally {
+      setActorEmail(null);
+      setAuthState('NO_SESSION');
+      setBiometricUnlocked(true);
+    }
+  }
+
+  // ---------- Authority / workflow ----------
   function grantPermission(subjectEmail: string, permission: Permission) {
     if (!actor || !actorEmail) return;
     if (!can(store, actor, 'AUTHORITY_MANAGE')) {
@@ -729,14 +840,7 @@ export default function AccountControl() {
     );
     if (already) return;
 
-    const g: AuthorityGrant = {
-      id: uuid(),
-      subjectEmail,
-      permission,
-      grantedAt: nowIso(),
-      grantedBy: actorEmail
-    };
-
+    const g: AuthorityGrant = { id: uuid(), subjectEmail, permission, grantedAt: nowIso(), grantedBy: actorEmail };
     setStore((prev) => ({ ...prev, grants: [g, ...prev.grants] }));
     auditPush({ action: 'AUTHORITY_GRANTED', targetEmail: subjectEmail, detail: `${permission} granted by ${actorEmail}` });
     setToast({ type: 'ok', msg: t('msg_saved') });
@@ -928,6 +1032,7 @@ export default function AccountControl() {
     setToast({ type: 'ok', msg: t('msg_saved') });
   }
 
+  // ---------- Selection / CSV / bulk (kept) ----------
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedEmails = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
 
@@ -942,21 +1047,7 @@ export default function AccountControl() {
   }
 
   function exportAccountsCsv() {
-    const header = [
-      'name',
-      'email',
-      'role',
-      'status',
-      'department',
-      'phone',
-      'employeeId',
-      'createdAt',
-      'createdBy',
-      'approvalDecision',
-      'approvalRequestedBy',
-      'approvalProcessedBy',
-      'approvalNote'
-    ];
+    const header = ['name', 'email', 'role', 'status', 'department', 'phone', 'employeeId', 'createdAt', 'createdBy'];
     const rows: string[][] = [header];
 
     for (const a of filteredAccounts) {
@@ -969,11 +1060,7 @@ export default function AccountControl() {
         a.phone ?? '',
         a.employeeId ?? '',
         a.createdAt ?? '',
-        a.createdBy ?? '',
-        a.approval?.decision ?? '',
-        a.approval?.requestedBy ?? '',
-        a.approval?.processedBy ?? '',
-        a.approval?.note ?? ''
+        a.createdBy ?? ''
       ]);
     }
 
@@ -1040,9 +1127,7 @@ export default function AccountControl() {
       addAccount(acc);
       auditPush({ action: 'REQUEST_CREATED', targetEmail: cleanEmail, detail: reason?.trim() ? `Note: ${reason.trim()}` : 'Created' });
 
-      if (canInstant && instantApprove) {
-        approve(cleanEmail, reason?.trim() || 'Instant approval');
-      }
+      if (canInstant && instantApprove) approve(cleanEmail, reason?.trim() || 'Instant approval');
 
       setModalCreate(false);
       setToast({ type: 'ok', msg: t('msg_saved') });
@@ -1091,12 +1176,7 @@ export default function AccountControl() {
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={instantApprove}
-                onChange={(e) => setInstantApprove(e.target.checked)}
-                className="h-4 w-4 accent-sky-500"
-              />
+              <input type="checkbox" checked={instantApprove} onChange={(e) => setInstantApprove(e.target.checked)} className="h-4 w-4 accent-sky-500" />
               Enable
             </label>
           </div>
@@ -1146,9 +1226,9 @@ export default function AccountControl() {
             <div className="text-xs text-slate-600">{target.createdBy}</div>
           </Card>
           <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4">
-            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">APPROVAL</div>
-            <div className="mt-2 text-sm text-slate-200">{target.approval?.decision ?? '—'}</div>
-            <div className="text-xs text-slate-600">{target.approval?.processedBy ?? ''}</div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">PASSKEYS</div>
+            <div className="mt-2 text-sm text-slate-200">{target.security?.passkeys?.length ?? 0}</div>
+            <div className="text-xs text-slate-600">{target.security?.biometricGateEnabled ? 'Gate ON' : 'Gate OFF'}</div>
           </Card>
         </div>
 
@@ -1175,9 +1255,7 @@ export default function AccountControl() {
 
         <div className="space-y-2">
           <div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">HR Docs (placeholder)</div>
-          <div className="text-sm text-slate-600">
-            Replace docs[] with your doc service and enforce access server-side. (UI gated by USER_DOCS_READ)
-          </div>
+          <div className="text-sm text-slate-600">Replace docs[] with your doc service and enforce access server-side.</div>
         </div>
       </div>
     );
@@ -1186,7 +1264,6 @@ export default function AccountControl() {
   const ApproveRejectModal = ({ email, mode }: { email: string; mode: 'approve' | 'reject' }) => {
     const target = getAccountByEmail(store.accounts, email);
     const [note, setNote] = useState('');
-
     if (!target) return null;
 
     const ok = () => {
@@ -1219,10 +1296,7 @@ export default function AccountControl() {
           <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => (mode === 'approve' ? setModalApproveEmail(null) : setModalRejectEmail(null))}>
             {t('cancel')}
           </Button>
-          <Button
-            className={`${mode === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'} text-white font-black h-11 px-6 rounded-xl uppercase`}
-            onClick={ok}
-          >
+          <Button className={`${mode === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'} text-white font-black h-11 px-6 rounded-xl uppercase`} onClick={ok}>
             {mode === 'approve' ? t('btn_approve') : t('btn_reject')}
           </Button>
         </div>
@@ -1262,8 +1336,7 @@ export default function AccountControl() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {PERMISSIONS.map((p) => {
             const enabled = subjectPerms.has(p.code);
-            const disabledByPolicy =
-              !actor || !can(store, actor, 'AUTHORITY_MANAGE') || (!actorIsPriv && !actorPerms.has(p.code));
+            const disabledByPolicy = !actor || !can(store, actor, 'AUTHORITY_MANAGE') || (!actorIsPriv && !actorPerms.has(p.code));
             const label = lang === 'en' ? p.label_en : p.label_mm;
 
             return (
@@ -1287,9 +1360,6 @@ export default function AccountControl() {
                     {enabled ? 'ON' : 'OFF'}
                   </label>
                 </div>
-                {!actorIsPriv && actor && !actorPerms.has(p.code) ? (
-                  <div className="mt-2 text-xs text-slate-600">You must hold this permission to grant it.</div>
-                ) : null}
               </div>
             );
           })}
@@ -1356,14 +1426,6 @@ export default function AccountControl() {
           <div className="mt-2 text-sm text-slate-200 break-all">
             {tokenInfo ? tokenInfo.token : <span className="text-slate-600">Token not in memory. Reset again to display.</span>}
           </div>
-          <div className="mt-2 text-xs text-slate-600">
-            Expires:{' '}
-            {tokenInfo?.expiresAt
-              ? new Date(tokenInfo.expiresAt).toLocaleString()
-              : target.security?.onboardingTokenExpiresAt
-                ? new Date(target.security.onboardingTokenExpiresAt).toLocaleString()
-                : '—'}
-          </div>
 
           <div className="mt-3 flex items-center gap-2">
             <Button
@@ -1421,7 +1483,7 @@ export default function AccountControl() {
         const row = parsed[r];
         const name = (row[iName] ?? '').trim();
         const email = (row[iEmail] ?? '').trim();
-        const role = (row[iRole] ?? USER_ROLES.STAFF).trim() as Role;
+        const role = ((row[iRole] ?? USER_ROLES.STAFF).trim() as Role) || (USER_ROLES.STAFF as Role);
         const department = (row[iDept] ?? '').trim();
         const phone = (row[iPhone] ?? '').trim();
         const employeeId = (row[iEmp] ?? '').trim();
@@ -1483,12 +1545,7 @@ export default function AccountControl() {
           </div>
 
           <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(e) => onPick(e.target.files?.[0] ?? null)}
-            />
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
             <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-10 px-4 rounded-xl uppercase">
               <Upload className="h-4 w-4 mr-2" />
               {fileName ? fileName : t('csvImport')}
@@ -1499,17 +1556,10 @@ export default function AccountControl() {
         {preview ? (
           <div className="p-4 rounded-2xl bg-[#0B101B] border border-white/10 space-y-2">
             <div className="text-sm text-slate-300">
-              OK: <span className="text-emerald-300 font-bold">{preview.ok}</span> • Skipped (duplicates):{' '}
+              OK: <span className="text-emerald-300 font-bold">{preview.ok}</span> • Skipped:{' '}
               <span className="text-amber-300 font-bold">{preview.skipped}</span> • Errors:{' '}
               <span className="text-rose-300 font-bold">{preview.errors.length}</span>
             </div>
-            {preview.errors.length ? (
-              <div className="text-xs text-rose-300 space-y-1 max-h-28 overflow-auto pr-1">
-                {preview.errors.slice(0, 50).map((e, i) => (
-                  <div key={i}>• {e}</div>
-                ))}
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -1517,12 +1567,7 @@ export default function AccountControl() {
           <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalImport(false)}>
             {t('cancel')}
           </Button>
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40"
-            disabled={!preview?.ok}
-            onClick={doImport}
-          >
-            <Import className="h-4 w-4 mr-2" />
+          <Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!preview?.ok} onClick={doImport}>
             {t('confirm')}
           </Button>
         </div>
@@ -1602,11 +1647,7 @@ export default function AccountControl() {
           <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalBulk(false)}>
             {t('cancel')}
           </Button>
-          <Button
-            className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40"
-            disabled={!selectedEmails.length}
-            onClick={apply}
-          >
+          <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!selectedEmails.length} onClick={apply}>
             {t('bulk_apply')}
           </Button>
         </div>
@@ -1623,8 +1664,49 @@ export default function AccountControl() {
           ? `${t('signedInAs')}: ${actorEmail}`
           : t('notSignedIn');
 
+  // ---------- Biometric Gate Overlay ----------
+  const gateActive =
+    sessionRegistered &&
+    !!actor?.security?.biometricGateEnabled &&
+    (actor.security?.passkeys?.length ?? 0) > 0 &&
+    !biometricUnlocked;
+
   return (
     <div className="p-6 md:p-10 space-y-6 bg-[#0B101B] min-h-screen text-slate-300">
+      {gateActive ? (
+        <div className="fixed inset-0 z-[1000] bg-[#05080F] flex items-center justify-center p-6">
+          <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#0B101B] p-8 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-white/5">
+                <Lock className="h-6 w-6 text-slate-200" />
+              </div>
+              <div>
+                <div className="text-white font-black uppercase italic">{t('biometric')}</div>
+                <div className="text-xs text-slate-500">{authLabel}</div>
+              </div>
+            </div>
+
+            <div className="text-sm text-slate-400">
+              {platformAuthAvailable ? t('biometric_unlock') : t('biometric_not_supported')}
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={signOut}>
+                Sign out
+              </Button>
+              <Button
+                className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40"
+                disabled={!platformAuthAvailable}
+                onClick={unlockWithFingerprint}
+              >
+                {t('biometric_unlock')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-[#05080F] p-6 md:p-8 rounded-[2.5rem] border border-white/5">
         <div className="flex items-center gap-6">
           <div className="p-4 bg-sky-500/10 rounded-2xl">
@@ -1663,7 +1745,7 @@ export default function AccountControl() {
                 </Button>
                 <Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={exportGrantsCsv}>
                   <Download className="h-4 w-4 mr-2" />
-                  {t('csv_grants')}
+                  Authorities CSV
                 </Button>
               </>
             ) : null}
@@ -1698,6 +1780,56 @@ export default function AccountControl() {
         </div>
       </div>
 
+      {/* Biometric Quick Access (for all users: each user must enroll on their device) */}
+      {sessionRegistered && actor ? (
+        <Card className="bg-[#05080F] border-none ring-1 ring-white/5 rounded-[2rem] p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-white font-black uppercase italic">{t('biometric')}</div>
+              <div className="text-sm text-slate-500">
+                {platformAuthAvailable ? (
+                  <>
+                    Passkeys registered: <span className="text-slate-300 font-bold">{actor.security?.passkeys?.length ?? 0}</span>
+                  </>
+                ) : (
+                  t('biometric_not_supported')
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                className="bg-white/10 hover:bg-white/15 text-white font-black h-11 px-5 rounded-xl uppercase disabled:opacity-40"
+                disabled={!platformAuthAvailable}
+                onClick={registerMyPasskey}
+              >
+                <Key className="h-4 w-4 mr-2" />
+                {t('biometric_enable')}
+              </Button>
+
+              <label className="flex items-center gap-2 text-sm text-slate-300 bg-white/5 border border-white/10 rounded-xl px-4 h-11">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-sky-500"
+                  checked={!!actor.security?.biometricGateEnabled}
+                  disabled={!platformAuthAvailable || (actor.security?.passkeys?.length ?? 0) === 0}
+                  onChange={(e) => toggleBiometricGate(e.target.checked)}
+                />
+                {t('biometric_gate')}
+              </label>
+
+              <Button
+                className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-5 rounded-xl uppercase disabled:opacity-40"
+                disabled={!platformAuthAvailable || (actor.security?.passkeys?.length ?? 0) === 0}
+                onClick={unlockWithFingerprint}
+              >
+                {t('biometric_unlock')}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       {toast ? (
         <div
           className={`rounded-2xl border px-4 py-3 text-sm flex items-center gap-2 ${
@@ -1708,17 +1840,12 @@ export default function AccountControl() {
                 : 'border-rose-500/20 bg-rose-500/5 text-rose-300'
           }`}
         >
-          {toast.type === 'ok' ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : toast.type === 'warn' ? (
-            <AlertTriangle className="h-4 w-4" />
-          ) : (
-            <XCircle className="h-4 w-4" />
-          )}
+          {toast.type === 'ok' ? <CheckCircle2 className="h-4 w-4" /> : toast.type === 'warn' ? <AlertTriangle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           <div>{toast.msg}</div>
         </div>
       ) : null}
 
+      {/* Filters */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <Pill className="bg-white/5 text-slate-300">{t('filters')}</Pill>
@@ -1832,6 +1959,9 @@ export default function AccountControl() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {user.department ? <Pill className="bg-white/5 text-slate-300">{user.department}</Pill> : null}
                         {user.employeeId ? <Pill className="bg-white/5 text-slate-300">{user.employeeId}</Pill> : null}
+                        <Pill className="bg-white/5 text-slate-300">
+                          Passkeys: {user.security?.passkeys?.length ?? 0}
+                        </Pill>
                       </div>
                     </td>
 
@@ -1854,13 +1984,7 @@ export default function AccountControl() {
                         <UserCog size={16} />
                       </Button>
 
-                      <Button
-                        variant="ghost"
-                        className="h-10 text-slate-500 hover:text-white disabled:opacity-40"
-                        title={t('btn_docs')}
-                        disabled={!canDocs}
-                        onClick={() => setModalProfileEmail(user.email)}
-                      >
+                      <Button variant="ghost" className="h-10 text-slate-500 hover:text-white disabled:opacity-40" title={t('btn_docs')} disabled={!canDocs} onClick={() => setModalProfileEmail(user.email)}>
                         <FileText size={16} />
                       </Button>
 
@@ -1884,23 +2008,12 @@ export default function AccountControl() {
                         <Lock size={16} />
                       </Button>
 
-                      <Button
-                        variant="ghost"
-                        className="h-10 text-slate-500 hover:text-white disabled:opacity-40"
-                        title={t('btn_auth')}
-                        disabled={!canAuth}
-                        onClick={() => setModalAuthorityEmail(user.email)}
-                      >
+                      <Button variant="ghost" className="h-10 text-slate-500 hover:text-white disabled:opacity-40" title={t('btn_auth')} disabled={!canAuth} onClick={() => setModalAuthorityEmail(user.email)}>
                         <ShieldCheck size={16} />
                       </Button>
 
                       {canRoleEdit ? (
-                        <select
-                          className="h-10 rounded-xl bg-[#0B101B] border border-white/10 px-3 text-xs text-slate-200 ml-2"
-                          value={user.role}
-                          onChange={(e) => changeRole(user.email, e.target.value as Role)}
-                          title={t('btn_role')}
-                        >
+                        <select className="h-10 rounded-xl bg-[#0B101B] border border-white/10 px-3 text-xs text-slate-200 ml-2" value={user.role} onChange={(e) => changeRole(user.email, e.target.value as Role)} title={t('btn_role')}>
                           {roles.map((r) => (
                             <option key={r} value={r}>
                               {r}
@@ -1944,6 +2057,7 @@ export default function AccountControl() {
         </Card>
       )}
 
+      {/* Modals */}
       <Modal open={modalCreate} title={t('create_title')} onClose={() => setModalCreate(false)} widthClass="max-w-3xl">
         <CreateForm />
       </Modal>
