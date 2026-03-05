@@ -23,13 +23,3 @@ export async function listMyRecentEvents(limit = 20) {
   if (error) throw error;
   return data;
 }
-
-export async function traceByWayId(wayId: string) {
-  const { data, error } = await supabase
-    .from("supply_chain_events")
-    .select("*")
-    .eq("way_id", wayId.toUpperCase())
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data;
-}
