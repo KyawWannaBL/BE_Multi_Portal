@@ -9,7 +9,10 @@ export function getTier(role?: string, tierLevel?: any): Tier {
 
   const r = (role || "").toUpperCase();
   if (["SUPER_ADMIN", "SYS", "APP_OWNER"].includes(r)) return "L5";
-  if (["ADMIN", "MGR"].includes(r)) return "L4";
+  if (["ADMIN", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
+  if (r.includes("FINANCE") || r.includes("HR")) return "L3";
+  if (r.includes("SUPERVISOR") || r.includes("STAFF")) return "L2";
+  
   return "L1";
 }
 
@@ -22,5 +25,9 @@ export default function TierBadge({ role, tierLevel, className }: { role?: strin
     L2: "bg-white/10 text-slate-200 border-white/15",
     L1: "bg-white/5 text-slate-300 border-white/10"
   };
-  return <span className={`h-8 px-3 rounded-full border text-[11px] font-black uppercase flex items-center ${colors[tier]} ${className || ""}`}>{tier}</span>;
+  return (
+    <span className={`h-8 px-3 rounded-full border text-[11px] font-black uppercase flex items-center ${colors[tier]} ${className || ""}`} title={`Tier ${tier}`}>
+      {tier}
+    </span>
+  );
 }

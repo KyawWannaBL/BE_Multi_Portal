@@ -21,7 +21,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (session?.user) {
         // Schema-resilient profile loading
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-        setUser({ ...session.user, profile: profile || {}, role: profile?.role || 'GUEST' });
+        setUser({ 
+          ...session.user, 
+          profile: profile || {}, 
+          role: profile?.role || profile?.role_code || 'GUEST' 
+        });
       } else {
         setUser(null);
       }
@@ -30,7 +34,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => useContext(AuthContext);
