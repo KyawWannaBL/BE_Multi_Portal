@@ -117,3 +117,8 @@ fixRider.js
 fixSainDirect.js
 forceMetadata.js
 updateRider.js
+
+# EN: local backups (do not commit)
+# MY: local backup ဖိုင်တွေ (commit မလုပ်)
+.backup_mapbox_*/
+src.zip
