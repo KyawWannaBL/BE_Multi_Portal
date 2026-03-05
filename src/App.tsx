@@ -4,6 +4,7 @@ import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 
 import AdminLayout from "./components/AdminLayout";
 import Login from "./pages/LoginPage";
+import ResetPassword from "./pages/ResetPassword";
 import Unauthorized from "./pages/Unauthorized";
 import DashboardRedirect from "./pages/DashboardRedirect";
 
@@ -55,6 +56,7 @@ export default function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
 
             {/* Protected Routes */}
