@@ -33,8 +33,6 @@ export default function QROpsScanPage() {
             "EXEC_RETURNED",
             "SUPV_EXCEPTION_OPENED",
             "SUPV_EXCEPTION_RESOLVED",
-            "SUPV_APPROVED",
-            "SUPV_REJECTED",
             "FIN_COD_COLLECTED",
             "FIN_DEPOSITED",
           ]}

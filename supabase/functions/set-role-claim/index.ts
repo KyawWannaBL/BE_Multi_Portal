@@ -1,52 +1,58 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
-  // 1. Handle CORS Preflight request
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    // 2. Parse the request body
-    const { user_id, role } = await req.json()
+    const { user_id, role } = await req.json();
+    if (!user_id || !role) throw new Error("Missing user_id or role");
 
-    if (!user_id || !role) {
-      throw new Error('Missing user_id or role')
-    }
-
-    // 3. Initialize Supabase Admin Client
-    // We use the SERVICE_ROLE_KEY to bypass RLS and modify Auth schema
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
-    // 4. Update the User's app_metadata
-    // 'app_metadata' is secure and included in the JWT. 
-    // 'user_metadata' is editable by the user (insecure for roles).
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-      user_id,
-      { app_metadata: { role: role } }
-    )
+    const roleUpper = String(role).trim().toUpperCase();
 
-    if (error) throw error
+    // 1) Update Auth app_metadata role (JWT uses app_metadata.role)
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+      app_metadata: { role: roleUpper, app_role: roleUpper },
+    });
+    if (error) throw error;
 
-    // 5. Return success response
-    return new Response(JSON.stringify({ success: true, data }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const email = (data as any)?.user?.email?.toLowerCase?.() ?? null;
+
+    // 2) Keep public.users role in sync (identity + FK)
+    //    id = auth.users.id
+    try {
+      await supabaseAdmin.from("users").upsert(
+        { id: user_id, email, role: roleUpper },
+        { onConflict: "id" }
+      );
+    } catch (_) {}
+
+    // 3) Keep profiles role in sync (Login UI + routing)
+    try {
+      await supabaseAdmin.from("profiles").upsert(
+        { id: user_id, role: roleUpper, role_code: roleUpper, app_role: roleUpper, user_role: roleUpper },
+        { onConflict: "id" }
+      );
+    } catch (_) {}
+
+    return new Response(JSON.stringify({ ok: true, user_id, role: roleUpper }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
-    })
-
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
-    })
+    });
   }
-})
+});

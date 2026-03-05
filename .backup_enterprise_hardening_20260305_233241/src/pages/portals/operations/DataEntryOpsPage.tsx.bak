@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { createShipmentDataEntry } from "@/services/shipments";
+import { createShipment } from "@/services/shipments";
 import { recordSupplyEvent } from "@/services/supplyChain";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default function DataEntryOpsPage() {
     setMsg(null);
     setBusy(true);
     try {
-      const res = await createShipmentDataEntry({
+      const res = await createShipment({
         receiver_name,
         receiver_phone,
         receiver_address,
