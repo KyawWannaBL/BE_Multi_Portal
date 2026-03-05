@@ -1,0 +1,27 @@
+export const APP_ROLES = [
+  'APP_OWNER',
+  'SUPER_ADMIN',
+
+  'OPERATIONS_ADMIN',
+  'FINANCE_USER',
+  'FINANCE_STAFF',
+  'MARKETING_ADMIN',
+  'HR_ADMIN',
+  'CUSTOMER_SERVICE',
+
+  'SUPERVISOR',
+  'WAREHOUSE_MANAGER',
+  'SUBSTATION_MANAGER',
+
+  'STAFF',
+  'DATA_ENTRY',
+
+  'RIDER',
+  'DRIVER',
+  'HELPER',
+
+  'MERCHANT',
+  'CUSTOMER',
+] as const;
+
+export type AppRole = typeof APP_ROLES[number];

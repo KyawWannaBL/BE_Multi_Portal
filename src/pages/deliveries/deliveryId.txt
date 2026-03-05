@@ -1,0 +1,30 @@
+{
+  groupShipmentId: string,
+  wayId: string,
+  merchant: string,
+
+  customerName: string,
+  address: string,
+  phone?: string,
+
+  collectionType: "COD" | "PREPAID",
+  paymentMethod: "CASH" | "TRANSACTION",
+  amountCash: number,
+  amountTransaction: number,
+
+  deliveryStatus: "DELIVERED" | "RETURN" | "REJECT",
+
+  signatureUrl?: string,         // Firebase Storage
+  signaturePngBase64?: string,   // optional alternative (not recommended)
+
+  riderRemark:
+    | "DONE" | "RETURNED" | "REJECTED" | "DAMAGED"
+    | "CUSTOMER_NOT_REACHABLE" | "WRONG_ADDRESS" | "RESCHEDULE"
+    | "PARTIAL_PAYMENT" | "OTHER",
+
+  customerReviewText?: string,
+  customerReviewRating?: 1 | 2 | 3 | 4 | 5,
+
+  updatedAt: Timestamp,
+  updatedByUid: string
+}

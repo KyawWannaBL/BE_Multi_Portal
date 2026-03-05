@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Britium Express",
+    "slug": "britium-express",
+    "version": "1.0.0",
+    "scheme": "britium-app", 
+    "ios": {
+      "bundleIdentifier": "com.kyawwannabl.britium",
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Britium requires location access to track delivery progress on the real-time map."
+      }
+    },
+    "extra": {
+      "supabaseUrl": "your-supabase-url",
+      "supabaseAnonKey": "your-supabase-anon-key"
+    }
+  }
+}

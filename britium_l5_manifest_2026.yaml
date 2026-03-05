@@ -1,0 +1,35 @@
+# BRITIUM EXPRESS L5 - MASTER ACCESS MANIFEST
+# Generated: 2026-03-02
+# Level: L5 SOVEREIGN ONLY (အဆင့်_၅ အုပ်ချုပ်သူအတွက်သာ)
+
+Infrastructure_Core:
+  Project_Name: "Britium Express Logistics"
+  Standard: "L5_Enterprise_Sovereign"
+  Primary_Locale: "MM-EN_Bilingual"
+
+Security_Vault (SEC-01):
+  Encryption_Standard: "AES-256-GCM"
+  Master_Hash: "REDACTED_USE_L5_TOKEN"
+  MFA_Protocol: "Dual-Tier_Administrator_Signoff"
+
+API_Gateway_Access (API လမ်းကြောင်းများ):
+  Mapbox_Directions:
+    Key_Status: "ACTIVE"
+    Usage_Tier: "Enterprise_Unlimited"
+  Supabase_Realtime:
+    DB_URL: "https://db.britium.express"
+    Service_Role_Key: "ENC_SUPA_MASTER_9901"
+  SMS_Notification_Hub:
+    Provider: "BlueOcean_Gateway"
+    Account_SID: "BTX_2026_SID"
+
+Regional_Admin_Credentials:
+  YGN_HQ: "admin_ygn@britium.express"
+  MDY_HUB: "admin_mdy@britium.express"
+  NPT_HUB: "admin_npt@britium.express"
+
+Disaster_Recovery_Protocol (အရေးပေါ် ပြန်လည်ထူထောင်ရေး):
+  Kill_Switch_Route: "/admin/stress-test"
+  Manual_Handover_PDF: "/admin/handover"
+  Backup_Frequency: "Real-time_Sync_to_Cold_Storage"
+

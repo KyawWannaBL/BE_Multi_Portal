@@ -1,0 +1,9 @@
+[build]
+  base = "../.."
+  command = "pnpm --filter web-portal build"
+  publish = "apps/web-portal/dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

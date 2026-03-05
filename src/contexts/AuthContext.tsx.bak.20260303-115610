@@ -1,0 +1,146 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/supabaseClient";
+
+type Profile = {
+  id: string;
+  role: string | null;
+  must_change_password: boolean | null;
+  permissions?: string[] | null;
+};
+
+type AuthCtx = {
+  user: { id: string; email?: string } | null;
+  role: string | null;
+  permissions: string[];
+  mustChangePassword: boolean;
+  isAuthenticated: boolean;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
+};
+
+const Ctx = createContext<AuthCtx | null>(null);
+
+function normRole(v?: string | null) {
+  const s = (v ?? "").trim();
+  return s ? s.toUpperCase() : null;
+}
+
+async function loadProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, role, must_change_password")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    // Enterprise: never swallow silently; helps diagnose RLS / missing profile row.
+    console.warn("[AuthContext] loadProfile failed:", {
+      code: (error as any).code,
+      message: error.message,
+      details: (error as any).details,
+      hint: (error as any).hint,
+    });
+    return null;
+  }
+
+  return data as any;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthCtx["user"]>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const hydrate = async (session: any) => {
+    if (!session?.user) {
+      setUser(null);
+      setRole(null);
+      setPermissions([]);
+      setMustChangePassword(false);
+      setLoading(false);
+      return;
+    }
+
+    const u = session.user;
+    setUser({ id: u.id, email: u.email });
+
+    // Primary source: profiles table (RLS should allow read own row)
+    const profile = await loadProfile(u.id);
+
+    // Fallback source: JWT metadata (useful if profiles read is blocked)
+    const metaRole =
+      normRole(u?.app_metadata?.role) ||
+      normRole(u?.user_metadata?.role) ||
+      null;
+
+    setRole(normRole(profile?.role) || metaRole);
+
+    const perms = profile?.permissions;
+    setPermissions([]); // until you actually add permissions support
+
+    const must =
+      Boolean(profile?.must_change_password) ||
+      Boolean(u?.app_metadata?.must_change_password) ||
+      Boolean(u?.user_metadata?.must_change_password);
+
+    setMustChangePassword(must);
+    setLoading(false);
+  };
+
+  const refresh = async () => {
+    setLoading(true);
+    const { data } = await supabase.auth.getSession();
+    await hydrate(data?.session);
+  };
+
+  useEffect(() => {
+    void refresh();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      void hydrate(session);
+    });
+    return () => data?.subscription?.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data?.session) {
+      setLoading(false);
+      return { success: false, message: "Invalid clearance credentials." };
+    }
+    await hydrate(data.session);
+    return { success: true, message: "OK" };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    await refresh();
+  };
+
+  const value: AuthCtx = useMemo(
+    () => ({
+      user,
+      role,
+      permissions,
+      mustChangePassword,
+      isAuthenticated: !!user,
+      loading,
+      login,
+      logout,
+      refresh,
+    }),
+    [user, role, permissions, mustChangePassword, loading]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useAuth() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("useAuth must be used within AuthProvider");
+  return v;
+}

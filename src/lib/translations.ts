@@ -1,0 +1,42 @@
+export const translations = {
+  en: {
+    switchLang: "မြန်မာစာသို့ ပြောင်းရန်",
+    back: "Back",
+    controlCenter: "Control Center",
+    deptOversight: "Departmental Oversight",
+    viewAllStaff: "View All Staff",
+    provisionAccount: "Provision Account",
+    manageStaff: "Manage Staff",
+    launchPortal: "Launch Portal",
+    linehaulFleet: "Linehaul Fleet Command",
+    activeFleet: "Active Fleet",
+    routeOpt: "Route Optimizer",
+    genReports: "Generate Reports",
+    activeTrucks: "Active Trucks",
+    fuelBurn: "Fuel Burn (24H)",
+    efficiency: "Avg Efficiency",
+    alerts: "Alerts",
+    prev: "Previous",
+    next: "Next"
+  },
+  my: {
+    switchLang: "Switch to English",
+    back: "နောက်သို့",
+    controlCenter: "ထိန်းချုပ်မှု ဗဟိုဌာန",
+    deptOversight: "ဌာနဆိုင်ရာ ကြီးကြပ်မှု",
+    viewAllStaff: "ဝန်ထမ်းအားလုံး ကြည့်ရန်",
+    provisionAccount: "အကောင့်အသစ် ဖွင့်ရန်",
+    manageStaff: "ဝန်ထမ်း စီမံရန်",
+    launchPortal: "ပေါ်တယ် ဖွင့်ရန်",
+    linehaulFleet: "ကုန်တင်ယာဉ်တန်း ကွပ်ကဲမှု",
+    activeFleet: "လက်ရှိ ယာဉ်များ",
+    routeOpt: "လမ်းကြောင်း ရှာဖွေရေး",
+    genReports: "အစီရင်ခံစာ ထုတ်ရန်",
+    activeTrucks: "လည်ပတ်နေသော ယာဉ်များ",
+    fuelBurn: "ဆီသုံးစွဲမှု (၂၄ နာရီ)",
+    efficiency: "ပျမ်းမျှ ဆီစားနှုန်း",
+    alerts: "သတိပေးချက်များ",
+    prev: "ယခင်",
+    next: "ရှေ့သို့"
+  }
+};

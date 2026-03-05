@@ -1,0 +1,13 @@
+{
+  groupShipmentId: string,
+  date: "YYYY-MM-DD",
+  createdAt: Timestamp,
+  createdByUid: string,
+
+  driverName: string,
+  helperName: string,
+  riderName: string,
+
+  qrTokenHash: string,      // store hash, not token (optional)
+  status: "open" | "closed"
+}

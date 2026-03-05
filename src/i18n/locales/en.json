@@ -1,0 +1,25 @@
+{
+  "app": {
+    "name": "Britium Enterprise"
+  },
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "login": "Login",
+    "logout": "Logout"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign In",
+    "forgotPassword": "Forgot Password",
+    "changePassword": "Change Password"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "unauthorized": "Unauthorized"
+  }
+}

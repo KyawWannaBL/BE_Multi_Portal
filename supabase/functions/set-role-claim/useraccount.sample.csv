@@ -1,0 +1,6 @@
+email,full name,role,is active,must change password,is demo
+admin@example.com,Britium Admin,SUPER_ADMIN,TRUE,TRUE,TRUE
+supervisor@example.com,Britium Supervisor,SUPERVISOR,TRUE,TRUE,TRUE
+rider@example.com,Britium Rider,RIDER,TRUE,TRUE,TRUE
+merchant@example.com,Britium Merchant,MERCHANT,TRUE,TRUE,TRUE
+customer@example.com,Britium Customer,CUSTOMER,TRUE,TRUE,TRUE
