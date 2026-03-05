@@ -1,18 +1,21 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import TierBadge from "@/components/TierBadge";
+import { supabase } from "@/lib/supabase";
 
-export function PortalShell({
-  title,
-  links,
-  children,
-}: {
-  title: string;
-  links?: { to: string; label: string }[];
-  children: React.ReactNode;
-}) {
+export function PortalShell({ title, links, children }: { title: string; links?: { to: string; label: string }[]; children: React.ReactNode }) {
   const { logout, role, user } = useAuth();
+  const [tierLevel, setTierLevel] = useState<unknown>(null);
+
+  useEffect(() => {
+    async function loadTier() {
+      if (!user?.id) return;
+      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (data) setTierLevel((data as any).tier_level || (data as any).tier || null);
+    }
+    loadTier();
+  }, [user?.id]);
 
   return (
     <div className="min-h-screen bg-[#05080F] text-white">
@@ -22,38 +25,22 @@ export function PortalShell({
             <div className="h-9 w-9 rounded-2xl bg-emerald-500/20 border border-emerald-500/30" />
             <div>
               <div className="text-sm font-black tracking-widest uppercase">{title}</div>
-              <div className="text-[10px] opacity-70">
-                {user?.email ?? "—"} • {role ?? "NO_ROLE"}
-              </div>
+              <div className="text-[10px] opacity-70">{user?.email ?? "—"} • {role ?? "NO_ROLE"}</div>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
-            <TierBadge role={role} />
-            <button
-              className="text-xs px-3 py-2 rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5"
-              onClick={() => void logout()}
-            >
-              Sign out
-            </button>
+            <TierBadge role={role} tierLevel={tierLevel} />
+            <button className="text-xs px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5" onClick={() => void logout()}>Sign out</button>
           </div>
         </div>
-
-        {links?.length ? (
+        {links?.length && (
           <div className="mx-auto max-w-6xl px-4 pb-3 flex gap-2 flex-wrap">
             {links.map((l) => (
-              <Link
-                key={l.to}
-                to={l.to}
-                className="text-xs px-3 py-1.5 rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5"
-              >
-                {l.label}
-              </Link>
+              <Link key={l.to} to={l.to} className="text-xs px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5">{l.label}</Link>
             ))}
           </div>
-        ) : null}
+        )}
       </header>
-
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
   );

@@ -4,7 +4,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, Mail, Lock, User, ArrowLeft, Globe } from 'lucide-react';
 
-export default function Signup() {
+export default function SignUp() {
   const navigate = useNavigate();
   const { toggleLang, lang } = useLanguage();
   const [email, setEmail] = useState('');
@@ -15,100 +15,26 @@ export default function Signup() {
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate account creation request
     setTimeout(() => {
-      alert(lang === 'en'
-        ? 'Access request submitted to platform administrators.'
-        : 'အကောင့်ဖွင့်ရန် တောင်းဆိုမှု အောင်မြင်ပါသည်။');
+      alert(lang === 'en' ? 'Access request submitted to platform administrators.' : 'အကောင့်ဖွင့်ရန် တောင်းဆိုမှု အောင်မြင်ပါသည်။');
       navigate('/login');
     }, 1500);
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#05080F] p-4">
-      {/* 🎥 Background Video */}
-      <video autoPlay muted loop playsInline className="absolute z-0 min-w-full min-h-full object-cover opacity-20 grayscale-[0.3]">
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
-
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#05080F] p-4 relative">
       <div className="relative z-10 w-full max-w-md flex flex-col items-center">
-        <div className="w-16 h-16 bg-[#0B101B]/80 backdrop-blur-md border border-white/5 rounded-2xl flex items-center justify-center mb-6 shadow-2xl">
-          <ShieldCheck className="text-emerald-500 h-8 w-8" strokeWidth={2} />
-        </div>
-
-        <h1 className="text-4xl font-black text-white tracking-widest uppercase mb-3">
-          REQUEST <span className="text-emerald-500">ACCESS</span>
-        </h1>
-        <p className="text-[10px] text-slate-400 font-mono tracking-[0.2em] uppercase mb-8 text-center">
-          PERSONNEL REGISTRATION PORTAL
-        </p>
-
-        <div className="w-full bg-[#111622]/95 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl border border-white/5 border-t-[6px] border-t-emerald-500 relative overflow-hidden">
-          <form onSubmit={handleSignup} className="space-y-6">
-            <div className="relative group">
-              <User className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full h-14 rounded-2xl bg-black/40 border border-white/10 text-white pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all"
-                placeholder={lang === 'en' ? 'Full Name' : 'အမည်'}
-                required
-              />
-            </div>
-
-            <div className="relative group">
-              <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-14 rounded-2xl bg-black/40 border border-white/10 text-white pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all"
-                placeholder={lang === 'en' ? 'Email Address' : 'အီးမေးလ်'}
-                required
-              />
-            </div>
-
-            <div className="relative group">
-              <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-14 rounded-2xl bg-black/40 border border-white/10 text-white pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all"
-                placeholder={lang === 'en' ? 'Password' : 'စကားဝှက်'}
-                required
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-2xl shadow-xl transition-all"
-              disabled={isLoading}
-            >
-              {isLoading ? (lang === 'en' ? 'Submitting...' : 'တင်နေသည်...') : (lang === 'en' ? 'Submit Request' : 'တောင်းဆိုမှုတင်မည်')}
-            </Button>
-
-            <div className="flex items-center justify-between pt-2">
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-slate-400 hover:text-white"
-                onClick={() => navigate('/login')}
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" /> {lang === 'en' ? 'Back to Login' : 'Login သို့ ပြန်မည်'}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-slate-400 hover:text-white"
-                onClick={toggleLang}
-              >
-                <Globe className="h-4 w-4 mr-2" /> {lang === 'en' ? 'MY' : 'EN'}
-              </Button>
-            </div>
-          </form>
-        </div>
+        <h1 className="text-4xl font-black text-white uppercase mb-8">Request Access</h1>
+        <form onSubmit={handleSignup} className="w-full space-y-6 bg-[#111622] p-8 rounded-3xl border border-white/5">
+          <Input type="text" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required className="h-14 bg-black/40 rounded-2xl pl-4 text-white" />
+          <Input type="email" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} required className="h-14 bg-black/40 rounded-2xl pl-4 text-white" />
+          <Input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="h-14 bg-black/40 rounded-2xl pl-4 text-white" />
+          <Button type="submit" disabled={isLoading} className="w-full h-14 bg-emerald-600 rounded-2xl font-black uppercase">Submit Request</Button>
+          <div className="flex justify-between">
+            <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-400"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+            <Button variant="ghost" onClick={toggleLang} className="text-slate-400"><Globe className="mr-2 h-4 w-4" /> {lang === 'en' ? 'MY' : 'EN'}</Button>
+          </div>
+        </form>
       </div>
     </div>
   );

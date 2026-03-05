@@ -1,36 +1,39 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
-import { supabase, setRememberMe, getRememberMe } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import { useLanguage } from '@/contexts/LanguageContext';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
-import { Download, ArrowRight, ArrowLeft, Loader2, Mail, Lock } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase, isSupabaseConfigured, getRememberMe, setRememberMe } from "@/lib/supabase";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Globe, Loader2, Lock, Mail, RefreshCw, ShieldCheck, UserPlus } from "lucide-react";
+
+type View = "password" | "magic" | "otp_verify" | "forgot" | "request" | "force_change" | "mfa_enroll" | "mfa_verify";
 
 export default function Login() {
+  const navigate = useNavigate();
+  const { lang, toggleLang } = useLanguage();
   const { login } = useAuth();
-  const { lang } = useLanguage();
-  const [view, setView] = useState('password');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [isBooting, setIsBooting] = useState(true);
+  const [bootLog, setBootLog] = useState("Initializing BRITIUM Gateway...");
+  const [view, setView] = useState<View>("password");
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(getRememberMe());
-  const [apkMeta, setApkMeta] = useState({ size: '...', updated: '...' });
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const t = (en: string, my: string) => lang === 'en' ? en : my;
+  const t = (en: string, my: string) => lang === "en" ? en : my;
 
   useEffect(() => {
-    // Fetch APK metadata from headers
-    fetch('/android.apk', { method: 'HEAD' }).then(res => {
-      const size = (parseInt(res.headers.get('content-length') || '0') / 1024 / 1024).toFixed(1);
-      const lastMod = res.headers.get('last-modified');
-      setApkMeta({ 
-        size: `${size} MB`, 
-        updated: lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent' 
-      });
-    }).catch(() => {});
+    const run = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) navigate("/portal/operations", { replace: true });
+      setTimeout(() => setIsBooting(false), 1500);
+    };
+    run();
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -38,9 +41,36 @@ export default function Login() {
     setLoading(true);
     setRememberMe(remember);
     const { error } = await login(email, password);
-    if (error) alert(error.message);
+    if (error) setErrorMsg(error.message);
+    else navigate("/portal/operations");
     setLoading(false);
   };
+
+  if (isBooting) {
+    return (
+      <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4">
+        <div className="bg-white rounded-[24px] p-8 w-full max-w-md shadow-2xl">
+          <div className="flex items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center">
+              <img src="/logo.png" className="w-12 h-12" alt="Logo" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-black text-slate-900 uppercase">Britium</h2>
+              <p className="text-xs text-slate-500 italic">{t("Securing Gateway...", "စနစ်စစ်ဆေးနေသည်...")}</p>
+            </div>
+          </div>
+          <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+            <div className="text-[10px] font-black text-slate-500 uppercase">Status</div>
+            <div className="text-sm font-bold text-slate-800 mt-1">{bootLog}</div>
+            <div className="mt-4 flex items-center gap-3">
+              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" />
+              <span className="text-xs font-black text-emerald-600">System Online</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#05080F] flex flex-col items-center justify-center p-4">
@@ -53,71 +83,24 @@ export default function Login() {
         </div>
 
         <Card className="bg-[#111622] rounded-[2.5rem] border border-white/10 overflow-hidden shadow-3xl">
-          <div className="h-1.5 w-full bg-emerald-500" />
           <CardContent className="p-8 space-y-6">
+            {errorMsg && <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 text-xs font-bold">{errorMsg}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
-              <div className="relative">
-                <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-                <Input 
-                  type="email" 
-                  placeholder={t('Corporate Email', '???')} 
-                  value={email} 
-                  onChange={e => setEmail(e.target.value)} 
-                  className="pl-12 h-14 bg-black/40 border-white/10 rounded-2xl text-white" 
-                />
+              <Input type="email" placeholder="Corporate Email" value={email} onChange={e => setEmail(e.target.value)} required className="h-14 bg-black/40 rounded-2xl text-white pl-4" />
+              <Input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="h-14 bg-black/40 rounded-2xl text-white pl-4" />
+              <div className="flex justify-between items-center text-[11px] font-black">
+                <label className="flex items-center gap-2 text-slate-400">
+                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="accent-emerald-500" /> Remember Me
+                </label>
+                <button type="button" onClick={() => navigate("/signup")} className="text-emerald-400">Sign Up</button>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-                <Input 
-                  type="password" 
-                  placeholder={t('Password', '????')} 
-                  value={password} 
-                  onChange={e => setPassword(e.target.value)} 
-                  className="pl-12 h-14 bg-black/40 border-white/10 rounded-2xl text-white" 
-                />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={remember} 
-                  onChange={e => setRemember(e.target.checked)} 
-                  className="h-4 w-4 accent-emerald-500" 
-                /> 
-                {t('Remember me', '?????')}
-              </label>
-              <Button 
-                type="submit" 
-                disabled={loading} 
-                className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl"
-              >
+              <Button type="submit" disabled={loading} className="w-full h-14 bg-emerald-600 rounded-2xl font-black uppercase shadow-xl">
                 {loading ? <Loader2 className="animate-spin" /> : <>Authenticate <ArrowRight className="ml-2 h-5 w-5" /></>}
               </Button>
             </form>
-
-            <div className="flex justify-between gap-4">
-               <Button 
-                 variant="ghost" 
-                 onClick={() => alert('Wizard flow engaged: Previous view')} 
-                 className="text-slate-400 text-[10px] font-black uppercase tracking-widest"
-               >
-                 <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-               </Button>
-               <Button 
-                 variant="ghost" 
-                 onClick={() => alert('Wizard flow engaged: Next view')} 
-                 className="text-slate-400 text-[10px] font-black uppercase tracking-widest"
-               >
-                 Next <ArrowRight className="ml-2 h-4 w-4" />
-               </Button>
-            </div>
-
             <Separator className="bg-white/5" />
-
-            <a href="/android.apk" download className="flex flex-col items-center justify-center p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all group">
-              <div className="flex items-center gap-2 text-white font-black uppercase text-xs group-hover:text-emerald-400">
-                <Download className="h-4 w-4" /> Download APK
-              </div>
-              <div className="text-[10px] text-slate-500 mt-1 font-mono">{apkMeta.size}  Updated: {apkMeta.updated}</div>
+            <a href="/android.apk" download className="flex items-center justify-center gap-2 w-full h-12 rounded-2xl border border-white/10 bg-white/5 text-white font-black uppercase text-[11px] hover:bg-white/10 transition-all">
+              <Download className="h-4 w-4" /> Download Android APK
             </a>
           </CardContent>
         </Card>

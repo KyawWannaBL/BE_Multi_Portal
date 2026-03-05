@@ -1,7 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Supabase client singleton.
+ *
+ * Remember-me behavior:
+ * - remember_me=true  -> localStorage (stay logged in after browser restart)
+ * - remember_me=false -> sessionStorage (clears when tab/browser closes)
+ */
 const supabaseUrl = "https://dltavabvjwocknkyvwgz.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo";
+const supabaseAnonKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo";
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -19,15 +27,17 @@ export function setRememberMe(remember: boolean): void {
 }
 
 const hybridStorage = {
-  getItem: (key: string) => {
+  getItem(key: string) {
     if (typeof window === "undefined") return null;
-    return getRememberMe() ? window.localStorage.getItem(key) : window.sessionStorage.getItem(key);
+    const useLocal = getRememberMe();
+    return useLocal ? window.localStorage.getItem(key) : window.sessionStorage.getItem(key);
   },
-  setItem: (key: string, value: string) => {
+  setItem(key: string, value: string) {
     if (typeof window === "undefined") return;
-    (getRememberMe() ? window.localStorage : window.sessionStorage).setItem(key, value);
+    const useLocal = getRememberMe();
+    (useLocal ? window.localStorage : window.sessionStorage).setItem(key, value);
   },
-  removeItem: (key: string) => {
+  removeItem(key: string) {
     if (typeof window === "undefined") return;
     window.localStorage.removeItem(key);
     window.sessionStorage.removeItem(key);
