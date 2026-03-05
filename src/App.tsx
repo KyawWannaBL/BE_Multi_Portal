@@ -53,171 +53,105 @@ export default function App() {
       <Suspense fallback={<Loading />}>
         <Router>
           <Routes>
+            {/* Public Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
 
+            {/* Protected Routes */}
             <Route element={<RequireAuth />}>
               <Route path="/" element={<DashboardRedirect />} />
 
               {/* Enterprise portal entrypoints */}
-              <Route
-                path="/portal/admin"
-                element={
-                  <RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A"]}>
-                    <AdminPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/admin" element={
+                <RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A"]}>
+                  <AdminPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/operations"
-                element={
-                  <RequireRole allow={["OPERATIONS_ADMIN", "STAFF", "DATA_ENTRY", "ADM", "MGR", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <OperationsPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/operations" element={
+                <RequireRole allow={["OPERATIONS_ADMIN", "STAFF", "DATA_ENTRY", "ADM", "MGR", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <OperationsPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/operations/manual"
-                element={
-                  <RequireRole
-                    allow={[
-                      "OPERATIONS_ADMIN",
-                      "STAFF",
-                      "DATA_ENTRY",
-                      "SUPERVISOR",
-                      "WAREHOUSE_MANAGER",
-                      "SUBSTATION_MANAGER",
-                      "RIDER",
-                      "DRIVER",
-                      "HELPER",
-                      "ADM",
-                      "MGR",
-                      "SYS",
-                      "APP_OWNER",
-                      "SUPER_ADMIN",
-                    ]}
-                  >
-                    <ManualPage />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/operations/manual" element={
+                <RequireRole allow={["OPERATIONS_ADMIN", "STAFF", "DATA_ENTRY", "SUPERVISOR", "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER", "RIDER", "DRIVER", "HELPER", "ADM", "MGR", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <ManualPage />
+                </RequireRole>
+              } />
 
+              <Route path="/portal/execution/manual" element={
+                <RequireRole allow={["RIDER", "DRIVER", "HELPER"]}>
+                  <ManualPage />
+                </RequireRole>
+              } />
+              
+              <Route path="/portal/finance" element={
+                <RequireRole allow={["FINANCE_USER", "FINANCE_STAFF", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <FinancePortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/execution/manual"
-                element={
-                  <RequireRole
-                    allow={[
-                      "RIDER",
-                      "DRIVER",
-                      "HELPER",
-                    ]}
-                  >
-                    <ManualPage />
-                  </RequireRole>
-                }
-              />
-              <Route
-                path="/portal/finance"
-                element={
-                  <RequireRole allow={["FINANCE_USER", "FINANCE_STAFF", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <FinancePortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/marketing" element={
+                <RequireRole allow={["MARKETING_ADMIN", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <MarketingPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/marketing"
-                element={
-                  <RequireRole allow={["MARKETING_ADMIN", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <MarketingPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/hr" element={
+                <RequireRole allow={["HR_ADMIN", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <HrPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/hr"
-                element={
-                  <RequireRole allow={["HR_ADMIN", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <HrPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/support" element={
+                <RequireRole allow={["CUSTOMER_SERVICE", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <SupportPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/support"
-                element={
-                  <RequireRole allow={["CUSTOMER_SERVICE", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <SupportPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/supervisor" element={
+                <RequireRole allow={["SUPERVISOR", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <SupervisorPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/supervisor"
-                element={
-                  <RequireRole allow={["SUPERVISOR", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <SupervisorPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/warehouse" element={
+                <RequireRole allow={["WAREHOUSE_MANAGER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <WarehousePortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/warehouse"
-                element={
-                  <RequireRole allow={["WAREHOUSE_MANAGER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <WarehousePortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/branch" element={
+                <RequireRole allow={["SUBSTATION_MANAGER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <BranchPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/branch"
-                element={
-                  <RequireRole allow={["SUBSTATION_MANAGER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <BranchPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/execution" element={
+                <RequireRole allow={["RIDER", "DRIVER", "HELPER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <ExecutionPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/execution"
-                element={
-                  <RequireRole allow={["RIDER", "DRIVER", "HELPER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <ExecutionPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/merchant" element={
+                <RequireRole allow={["MERCHANT", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <MerchantPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/merchant"
-                element={
-                  <RequireRole allow={["MERCHANT", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <MerchantPortal />
-                  </RequireRole>
-                }
-              />
+              <Route path="/portal/customer" element={
+                <RequireRole allow={["CUSTOMER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
+                  <CustomerPortal />
+                </RequireRole>
+              } />
 
-              <Route
-                path="/portal/customer"
-                element={
-                  <RequireRole allow={["CUSTOMER", "SYS", "APP_OWNER", "SUPER_ADMIN"]}>
-                    <CustomerPortal />
-                  </RequireRole>
-                }
-              />
-
-              {/* Legacy admin route (deep admin UI, kept for backwards compatibility) */}
-              <Route
-                path="/admin"
-                element={
-                  <RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "MGR", "ADM"]}>
-                    <AdminLayout />
-                  </RequireRole>
-                }
-              >
+              {/* Legacy admin route */}
+              <Route path="/admin" element={
+                <RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "MGR", "ADM"]}>
+                  <AdminLayout />
+                </RequireRole>
+              }>
                 <Route index element={<Navigate to="dashboard" replace />} />
                 <Route path="dashboard" element={<SuperAdminDashboard />} />
                 <Route path="approvals" element={<AccountControl />} />
@@ -231,6 +165,7 @@ export default function App() {
               </Route>
             </Route>
 
+            {/* Fallback */}
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </Router>
