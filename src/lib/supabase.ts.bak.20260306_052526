@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = "https://dltavabvjwocknkyvwgz.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo";
 
-// CRITICAL: Exporting to fix RequireAuth.tsx build error
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 const REMEMBER_KEY = "be_remember_me";
@@ -22,7 +21,7 @@ export function setRememberMe(remember: boolean): void {
 const hybridStorage = {
   getItem: (key: string) => {
     if (typeof window === "undefined") return null;
-    return getRememberMe() ? localStorage.getItem(key) : sessionStorage.getItem(key);
+    return getRememberMe() ? window.localStorage.getItem(key) : window.sessionStorage.getItem(key);
   },
   setItem: (key: string, value: string) => {
     if (typeof window === "undefined") return;

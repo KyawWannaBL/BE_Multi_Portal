@@ -2,37 +2,22 @@ import React from "react";
 
 export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
 
-function normalizeRole(role?: string | null): string {
-  const r = (role ?? "").trim().toUpperCase();
-  if (!r) return "GUEST";
-  if (r.startsWith("SUPER")) return "SUPER_ADMIN";
-  if (r.startsWith("APP")) return "APP_OWNER";
-  if (r.startsWith("SYS")) return "SYS";
-  return r;
-}
+export function getTier(role?: string, tierLevel?: any): Tier {
+  const rawTier = String(tierLevel || "").trim().toUpperCase();
+  if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
+  if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
 
-export function normalizeTierLevel(input?: unknown): Tier | null {
-  if (!input) return null;
-  const raw = String(input).trim().toUpperCase();
-  if (/^L[1-5]$/.test(raw)) return raw as Tier;
-  if (/^[1-5]$/.test(raw)) return (`L${raw}` as Tier);
-  const m = raw.match(/([1-5])/);
-  if (m?.[1]) return (`L${m[1]}` as Tier);
-  return null;
-}
-
-export function tierFromRole(role?: string | null): Tier {
-  const r = normalizeRole(role);
-  if (r === "SYS" || r === "APP_OWNER" || r === "SUPER_ADMIN") return "L5";
-  if (r === "ADMIN" || r === "ADM" || r === "MGR" || r === "OPERATIONS_ADMIN") return "L4";
+  const r = (role ?? "").toUpperCase();
+  if (["SYS", "APP_OWNER"].includes(r)) return "L5";
+  if (["SUPER_ADMIN", "ADMIN", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
   if (r.includes("FINANCE") || r.includes("HR") || r.includes("MARKETING")) return "L3";
-  if (r === "SUPERVISOR" || r === "STAFF") return "L2";
+  if (r === "SUPERVISOR" || r === "STAFF" || r === "CUSTOMER_SERVICE" || r === "DATA_ENTRY") return "L2";
+  
   return "L1";
 }
 
 export default function TierBadge(props: { role?: string | null; tierLevel?: unknown; className?: string }) {
-  const byProfile = normalizeTierLevel(props.tierLevel);
-  const tier = byProfile || tierFromRole(props.role);
+  const tier = getTier(props.role || undefined, props.tierLevel);
 
   const colors: Record<Tier, string> = {
     L5: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
