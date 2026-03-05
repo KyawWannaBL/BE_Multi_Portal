@@ -6,7 +6,6 @@ export async function listAssignedShipments(riderId: string) {
     .select("*")
     .eq("assigned_rider_id", riderId)
     .order("created_at", { ascending: false });
-  
   if (error) throw error;
   return data;
 }

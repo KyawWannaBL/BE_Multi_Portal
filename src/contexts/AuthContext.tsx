@@ -10,7 +10,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        // Schema-resilient select
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
         setUser({ ...session.user, profile: profile || {} });
       } else {
