@@ -1,0 +1,214 @@
+1) Functions (features + key code functions)
+A) Authentication / Security (Login.tsx)
+
+User-facing functions:
+
+Password login (handlePasswordLogin)
+
+Magic link / OTP send (handleMagicSend)
+
+OTP verify (handleOtpVerify)
+
+Forgot password (handleForgot)
+
+Request access / signup (handleRequestAccess)
+
+Force password change (handleForceChange)
+
+MFA required for admin roles
+
+ensureMfa(), prepareMfaVerify(), enrollTotp(), verifyMfa()
+
+Routing/role helpers:
+
+normRole(), portalForRole()
+
+loadProfile(userId) (tries multiple columns on profiles)
+
+routeAfterAuth(userId) (must-change password → MFA → portal redirect)
+
+B) Role-based Access Control (routing layer)
+
+RequireAuth (blocks all protected routes if not authenticated)
+
+RequireRole (blocks route if role not in allow-list)
+
+C) Shipments (execution + operations)
+
+Service functions (src/services/shipments.ts):
+
+createShipment(...)
+
+listAssignedShipments(...)
+
+markPickedUp(shipmentId|wayId)
+
+markDelivered(shipmentId|wayId)
+
+D) Mapbox Navigation + Live Tracking
+
+Mapbox API helpers (src/services/mapbox.ts):
+
+isMapboxConfigured()
+
+geocodeForward()
+
+fetchDirections()
+
+fetchOptimizedTripV1()
+
+Live location publishing/subscribing:
+
+useCourierLocationPublisher({ enabled, minIntervalMs, minMoveMeters })
+
+useLiveCourierLocations({ enabled }) (loads + realtime subscription)
+
+Shipment tracking + delivered AWB helpers (src/services/shipmentTracking.ts):
+
+parseWayIdFromLabel(label)
+
+findShipmentIdByWayId(wayId)
+
+insertShipmentTrackingEvent({...}) → inserts into shipment_tracking
+
+markShipmentDeliveredByWayId({ wayId }) → updates shipments
+
+upsertCourierLocationWithMetrics({...}) → upserts into courier_locations
+
+Navigation workspace core functions (src/features/maps/MapboxNavigationWorkspace.tsx):
+
+Route planning: planRouteDirections(), planRouteOptimize()
+
+Map rendering: renderStops(), renderRouteLine(), redraw(), fitRoute()
+
+Stop editing: updateStop(), onDragEnd(), addStopFromFeature()
+
+Navigation control: startNav(), stopNav(), recalcFromCurrent()
+
+Geofence delivery: onGeofence(pos)
+
+POD flow: openPod(), submitPod(), doDeliverAfterPod()
+
+E) Supabase Edge Functions (backend ops)
+
+In supabase/functions/*:
+
+set-role-claim (assign role claim)
+
+rotate-password (force rotation)
+
+get-download-url (signed URL / storage access)
+
+shipment-notifications (event-based notifications)
+
+reset-accounts, hello-world, scripts (ops/dev utilities)
+
+2) Screens (active routes wired in src/App.tsx)
+Public
+
+/login → Login
+
+/reset-password → ResetPassword
+
+/unauthorized → Unauthorized
+
+Protected (after RequireAuth)
+
+/ → DashboardRedirect (redirects to portal based on role/profile)
+
+Portals (enterprise entry points)
+
+/portal/admin → AdminPortal (roles: SYS/APP_OWNER/SUPER_ADMIN/…)
+
+/portal/operations → OperationsPortal (ops/admin/staff)
+
+/portal/operations/manual → ManualPage (ops + supervisor + warehouse + branch + riders)
+
+/portal/operations/tracking → OperationsTrackingPage (ops + branch/supervisor/warehouse, includes Live Map)
+
+/portal/execution → ExecutionPortal (RIDER/DRIVER/HELPER + admins)
+
+/portal/execution/manual → ManualPage (RIDER/DRIVER/HELPER)
+
+/portal/execution/navigation → ExecutionNavigationPage (rider navigation + share toggle)
+
+/portal/finance → FinancePortal
+
+/portal/marketing → MarketingPortal
+
+/portal/hr → HrPortal
+
+/portal/support → SupportPortal
+
+/portal/supervisor → SupervisorPortal
+
+/portal/warehouse → WarehousePortal
+
+/portal/branch → BranchPortal (substation/branch manager concept)
+
+/portal/merchant → MerchantPortal
+
+/portal/customer → CustomerPortal
+
+Legacy Admin (nested)
+
+/admin/dashboard → SuperAdminDashboard
+
+/admin/accounts, /admin/approvals → AccountControl
+
+/admin/hr → HRPortal
+
+/admin/shipments → ShipmentControl
+
+/admin/fleet → FleetCommand
+
+/admin/omni-finance → OmniFinance
+
+/admin/live-map → LiveMap
+
+/admin/settings → SystemTariffs
+
+3) Mermaid diagrams
+A) High-level architecture
+Diagram is not supported.
+B) Login + role routing + MFA
+C) Rider live location → Operations tracking (Realtime)
+D) Navigation + Geofence + POD + Delivered AWB
+4) Operation flows (what staff actually does)
+Flow 1: Staff login (EN / MY)
+
+User goes to /login
+
+Login by Password or Email Link/OTP
+
+System loads profiles → checks must_change_password
+
+If admin role → enforce MFA (enroll or verify)
+
+Redirect to correct portal: Operations / Execution / Finance / etc
+
+Flow 2: Execution (Rider/Driver/Helper) delivery workflow
+
+Open /portal/execution → see assigned shipments
+
+Open /portal/execution/navigation
+
+Plan route (optimize or directions)
+
+Start navigation + optionally Share location
+
+When arriving in radius → geofence triggers tracking event
+
+Capture POD (signature/photo/OTP) → tracking event inserted
+
+Mark delivered → updates shipment status/time
+
+Flow 3: Branch/Operations live tracking (for branch offices)
+
+Open /portal/operations/tracking
+
+View live riders on map (subscribed via Supabase realtime)
+
+Monitor ETA/remaining distance if published
+
+Use this for branch coordination (handoffs, exceptions, late deliveries)

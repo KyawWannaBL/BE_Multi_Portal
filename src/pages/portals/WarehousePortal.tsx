@@ -23,7 +23,8 @@ export default function WarehousePortal() {
   }, []);
 
   return (
-    <PortalShell title="Warehouse Portal">
+    <PortalShell title="Warehouse Portal" links={[{ to: "/portal/warehouse/receiving", label: "Receiving" }, { to: "/portal/warehouse/dispatch", label: "Dispatch" }, { to: "/portal/operations/qr-scan", label: "QR Ops" }]}>
+
       <div className="space-y-3">
         <div className="text-sm opacity-80">Latest warehouse parcels (requires RLS allowance).</div>
         {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}

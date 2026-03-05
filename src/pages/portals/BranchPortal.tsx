@@ -50,7 +50,8 @@ export default function BranchPortal() {
   }, []);
 
   return (
-    <PortalShell title="Branch Manager Portal">
+    <PortalShell title="Branch Manager Portal" links={[{ to: "/portal/branch/inbound", label: "Inbound" }, { to: "/portal/branch/outbound", label: "Outbound" }, { to: "/portal/operations/qr-scan", label: "QR Ops" }]}>
+
       <div className="space-y-4">
         {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
 

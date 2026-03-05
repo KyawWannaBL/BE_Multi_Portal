@@ -23,7 +23,8 @@ export default function HrPortal() {
   }, []);
 
   return (
-    <PortalShell title="HR Portal">
+    <PortalShell title="HR Portal" links={[{ to: "/portal/hr/admin", label: "HR Admin Ops" }]}>
+
       <div className="space-y-3">
         {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
         <div className="grid gap-2">

@@ -32,6 +32,16 @@ import MerchantPortal from "@/pages/portals/MerchantPortal";
 import CustomerPortal from "@/pages/portals/CustomerPortal";
 import ManualPage from "@/pages/ManualPage";
 
+import QROpsScanPage from "@/pages/portals/operations/QROpsScanPage";
+import DataEntryOpsPage from "@/pages/portals/operations/DataEntryOpsPage";
+import WarehouseReceivingPage from "@/pages/portals/warehouse/WarehouseReceivingPage";
+import WarehouseDispatchPage from "@/pages/portals/warehouse/WarehouseDispatchPage";
+import SupervisorFraudPage from "@/pages/portals/supervisor/SupervisorFraudPage";
+import FinanceReconPage from "@/pages/portals/finance/FinanceReconPage";
+import HrAdminOpsPage from "@/pages/portals/hr/HrAdminOpsPage";
+import BranchInboundPage from "@/pages/portals/branch/BranchInboundPage";
+import BranchOutboundPage from "@/pages/portals/branch/BranchOutboundPage";
+
 // Existing modules (admin deep UI)
 import ShipmentControl from "./pages/ShipmentControl";
 import FleetCommand from "./pages/FleetCommand";
@@ -180,6 +190,87 @@ export default function App() {
                 element={
                   <RequireRole allow={["RIDER","DRIVER","HELPER","SYS","APP_OWNER","SUPER_ADMIN"]}>
                     <ExecutionNavigationPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/operations/qr-scan"
+                element={
+                  <RequireRole allow={["OPERATIONS_ADMIN","STAFF","DATA_ENTRY","SUPERVISOR","WAREHOUSE_MANAGER","SUBSTATION_MANAGER","BRANCH_MANAGER","RIDER","DRIVER","HELPER","FINANCE_USER","FINANCE_STAFF","HR_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <QROpsScanPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/operations/data-entry"
+                element={
+                  <RequireRole allow={["DATA_ENTRY","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <DataEntryOpsPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/warehouse/receiving"
+                element={
+                  <RequireRole allow={["WAREHOUSE_MANAGER","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <WarehouseReceivingPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/warehouse/dispatch"
+                element={
+                  <RequireRole allow={["WAREHOUSE_MANAGER","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <WarehouseDispatchPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/supervisor/fraud"
+                element={
+                  <RequireRole allow={["SUPERVISOR","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <SupervisorFraudPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/finance/reconcile"
+                element={
+                  <RequireRole allow={["FINANCE_USER","FINANCE_STAFF","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <FinanceReconPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/hr/admin"
+                element={
+                  <RequireRole allow={["HR_ADMIN","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <HrAdminOpsPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/branch/inbound"
+                element={
+                  <RequireRole allow={["SUBSTATION_MANAGER","BRANCH_MANAGER","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <BranchInboundPage />
+                  </RequireRole>
+                }
+              />
+
+              <Route
+                path="/portal/branch/outbound"
+                element={
+                  <RequireRole allow={["SUBSTATION_MANAGER","BRANCH_MANAGER","OPERATIONS_ADMIN","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <BranchOutboundPage />
                   </RequireRole>
                 }
               />
