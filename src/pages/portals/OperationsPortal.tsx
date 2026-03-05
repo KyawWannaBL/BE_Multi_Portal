@@ -35,7 +35,7 @@ export default function OperationsPortal() {
   return (
     <PortalShell
       title="Operations Portal"
-      links={[
+      links={[{ to: "/portal/operations/tracking", label: "Live Tracking" },
         { to: "/portal/operations/manual", label: "QR Ops Manual" },
         { to: "/portal/supervisor", label: "Supervisor" },
         { to: "/portal/warehouse", label: "Warehouse" },

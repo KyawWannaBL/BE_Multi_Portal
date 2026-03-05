@@ -69,6 +69,7 @@ export default function ExecutionPortal() {
         showManual
           ? [
               { to: "/portal/execution/manual", label: t === "en" ? "QR Ops Manual" : "QR လမ်းညွှန်" },
+              { to: "/portal/execution/navigation", label: t === "en" ? "Navigation" : "လမ်းညွှန်" },
               { to: "/portal/supervisor", label: "Supervisor" },
             ]
           : [{ to: "/portal/supervisor", label: "Supervisor" }]
@@ -89,7 +90,20 @@ export default function ExecutionPortal() {
           </div>
         ) : null}
 
-        {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
+        
+
+        {showManual ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">{t === "en" ? "Navigation" : "လမ်းညွှန်"}</div>
+              <div className="text-xs opacity-70">{t === "en" ? "Route planning + live GPS" : "Route planning + live GPS"}</div>
+            </div>
+            <Link to="/portal/execution/navigation">
+              <Button size="sm" variant="outline">{t === "en" ? "Open" : "ဖွင့်ရန်"}</Button>
+            </Link>
+          </div>
+        ) : null}
+{err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
 
         <div className="grid gap-3">
           {rows.map((s) => (

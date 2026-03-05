@@ -1,3 +1,5 @@
+import OperationsTrackingPage from "./pages/portals/OperationsTrackingPage";
+import ExecutionNavigationPage from "./pages/portals/ExecutionNavigationPage";
 import React, { Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
@@ -165,6 +167,22 @@ export default function App() {
                 <Route path="live-map" element={<LiveMap />} />
                 <Route path="settings" element={<SystemTariffs />} />
               </Route>
+              <Route
+                path="/portal/operations/tracking"
+                element={
+                  <RequireRole allow={["OPERATIONS_ADMIN","STAFF","SUPERVISOR","WAREHOUSE_MANAGER","SUBSTATION_MANAGER","BRANCH_MANAGER","ADM","MGR","SUPER_ADMIN","SYS","APP_OWNER"]}>
+                    <OperationsTrackingPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/portal/execution/navigation"
+                element={
+                  <RequireRole allow={["RIDER","DRIVER","HELPER","SYS","APP_OWNER","SUPER_ADMIN"]}>
+                    <ExecutionNavigationPage />
+                  </RequireRole>
+                }
+              />
             </Route>
 
             {/* Fallback */}
