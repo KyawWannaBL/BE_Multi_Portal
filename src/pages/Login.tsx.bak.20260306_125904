@@ -37,24 +37,19 @@ export default function Login() {
 
   useEffect(() => {
     let mounted = true;
-    
-    // HARD FALLBACK: Ensure the boot screen disappears after 3 seconds NO MATTER WHAT
-    const hardTimeout = setTimeout(() => {
-      if (mounted) setIsBooting(false);
-    }, 3000);
-
     const run = async () => {
       try {
         if (!isSupabaseConfigured) return;
         const { data } = await supabase.auth.getSession();
         if (data?.session && mounted) {
+          // Hand off to DashboardRedirect to prevent infinite specific-route loops
           navigate("/", { replace: true });
         }
       } catch (err) {
         console.error("Boot sequence error:", err);
       } finally {
         if (mounted) {
-          setTimeout(() => setIsBooting(false), 1000);
+          setTimeout(() => setIsBooting(false), 1500);
         }
       }
     };
@@ -65,31 +60,12 @@ export default function Login() {
       const len = res.headers.get('content-length');
       const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
       const lastMod = res.headers.get('last-modified');
-      let updated = 'Recent';
-      try {
-         if (lastMod) updated = new Date(lastMod).toISOString().split('T')[0];
-      } catch(e){}
+      const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
       setApkMeta({ size, updated });
     }).catch(() => {});
 
-    return () => { 
-      mounted = false; 
-      clearTimeout(hardTimeout);
-    };
+    return () => { mounted = false; };
   }, [navigate]);
-
-  const handleRouting = async (userId: string) => {
-    try {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-      const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
-      if (["SUPER_ADMIN", "APP_OWNER", "SYS"].includes(role)) navigate("/portal/admin/executive");
-      else if (role.includes("FINANCE")) navigate("/portal/finance");
-      else if (["RIDER", "DRIVER", "HELPER"].includes(role)) navigate("/portal/execution");
-      else navigate("/portal/operations");
-    } catch (err) {
-      navigate("/portal/operations");
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +116,7 @@ export default function Login() {
   };
 
   const finalizeLogin = async () => {
+    // Rely on App.tsx root redirection to avoid looping broken paths
     navigate("/", { replace: true });
   };
 
