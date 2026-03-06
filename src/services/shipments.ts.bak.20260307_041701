@@ -1,8 +1,8 @@
 // @ts-nocheck
 /**
  * Shipments Service (EN/MM)
- * EN: Build-stable stubs for Execution/Operations/Approvals services.
- * MY: Execution/Operations/Approvals build မပျက်အောင် stub များ။
+ * EN: Build-stable stubs for Execution/Operations pages.
+ * MY: Execution/Operations များ build မပျက်အောင် stub များ။
  */
 
 export type Shipment = {
@@ -20,62 +20,37 @@ export type Shipment = {
   meta?: any;
 };
 
-export type TrackingNote = {
-  way_id?: string;
-  shipment_id?: string;
-  note?: string;
-  created_at?: string;
-  created_by?: string;
-  meta?: any;
-};
-
-/** EN: list assigned shipments | MY: assign လုပ်ထားတဲ့ shipment များ */
 export async function listAssignedShipments(...args: any[]): Promise<Shipment[]> {
   console.log("[shipments] listAssignedShipments:", args);
   return [];
 }
 
-/** ✅ EN: Approvals expects this | ✅ MY: approvals.ts မှာ သုံးတဲ့ function */
-export async function addTrackingNote(
-  wayId: string,
-  note: string,
-  meta?: any
-): Promise<{ success: boolean }> {
-  console.log("[shipments] addTrackingNote:", { wayId, note, meta });
-  return { success: true };
-}
-
-/** EN: mark pickup | MY: picked up အဖြစ် မှတ် */
 export async function markPickedUp(wayId: string, payload?: any): Promise<{ success: boolean }> {
   console.log("[shipments] markPickedUp:", wayId, payload);
   return { success: true };
 }
 
-/** EN: mark out for delivery | MY: ပို့ဆောင်ရန် ထွက်ပြီ */
 export async function markOutForDelivery(wayId: string, payload?: any): Promise<{ success: boolean }> {
   console.log("[shipments] markOutForDelivery:", wayId, payload);
   return { success: true };
 }
 
-/** EN: mark delivered | MY: ပို့ပြီး */
 export async function markDelivered(wayId: string, payload?: any): Promise<{ success: boolean }> {
   console.log("[shipments] markDelivered:", wayId, payload);
   return { success: true };
 }
 
-/** EN: mark failed | MY: မအောင်မြင် (failed) */
 export async function markFailed(wayId: string, payload?: any): Promise<{ success: boolean }> {
   console.log("[shipments] markFailed:", wayId, payload);
   return { success: true };
 }
 
-/** EN/MM: compatibility aliases (legacy imports) */
+/** EN/MM: compatibility aliases */
 export const markPickUp = markPickedUp;
 export const markDelivery = markDelivered;
 
 export default {
   listAssignedShipments,
-  addTrackingNote,
   markPickedUp,
   markOutForDelivery,
   markDelivered,

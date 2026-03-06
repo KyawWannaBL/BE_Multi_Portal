@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from "react";
-import { normalizeRole } from "@/lib/permissionResolver";
+import { normalizeRole } from "@/lib/portalRegistry";
 
 export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
 

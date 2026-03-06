@@ -86,8 +86,8 @@ export function loadStore(): Store {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedStore();
     const s = JSON.parse(raw) as Partial<Store>;
-    if (!s || !Array.isArray(s.accounts) || !Array.isArray(s.grants) || !Array.isArray(s.audit)) return seedStore();
-    return { v: 2, accounts: s.accounts as Account[], grants: s.grants as AuthorityGrant[], authorityRequests: Array.isArray((s as any).authorityRequests) ? ((s as any).authorityRequests as AuthorityRequest[]) : [], audit: s.audit as AuditEvent[] };
+    if (!s || !Array.isArray(s.accounts)) return seedStore();
+    return { v: 2, accounts: s.accounts as Account[], grants: Array.isArray(s.grants) ? s.grants : [], authorityRequests: Array.isArray((s as any).authorityRequests) ? ((s as any).authorityRequests as AuthorityRequest[]) : [], audit: Array.isArray(s.audit) ? s.audit : [] };
   } catch { return seedStore(); }
 }
 

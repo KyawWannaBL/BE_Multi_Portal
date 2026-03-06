@@ -1,78 +1,36 @@
 // @ts-nocheck
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { loadStore, getAccountByEmail, effectivePermissions, roleIsPrivileged } from "@/lib/accountControlStore";
-
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 const AuthContext = createContext<any>({});
-
-function extractRole(profile: any) {
-  return profile?.role || profile?.role_code || profile?.app_role || profile?.user_role || "GUEST";
-}
-function extractMustChange(profile: any) {
-  return Boolean(profile?.must_change_password || profile?.requires_password_change || profile?.requires_password_reset);
-}
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [mustChangePassword, setMustChangePassword] = useState(false);
-
-  const permissions = useMemo(() => {
-    const email = user?.email;
-    if (!email || typeof window === "undefined") return [];
-    const store = loadStore();
-    const actor = getAccountByEmail(store.accounts || [], email);
-    if (!actor) return [];
-    if (roleIsPrivileged(actor.role)) return ["*"];
-    return Array.from(effectivePermissions(store, actor));
-  }, [user?.email]);
-
-  const loadProfileIntoUser = async (sessionUser: any) => {
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", sessionUser.id).maybeSingle();
-    const role = extractRole(profile);
-    const mustChange = extractMustChange(profile);
-    setMustChangePassword(mustChange);
-    setUser({ ...sessionUser, profile: profile || {}, role, permissions });
-  };
-
-  const refresh = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) { setUser(null); setMustChangePassword(false); return; }
-    await loadProfileIntoUser(session.user);
-  };
-
-  const login = async (email: string, pass: string) => supabase.auth.signInWithPassword({ email, password: pass });
-  const logout = async () => { await supabase.auth.signOut(); setUser(null); setMustChangePassword(false); };
-
+  const login = async (email: string, pass: string) => await supabase.auth.signInWithPassword({ email, password: pass });
+  const logout = async () => { await supabase.auth.signOut(); setUser(null); };
   useEffect(() => {
-    let mounted = true; let sub: any = null;
-    const init = async () => {
+    let mounted = true; let authSubscription: any = null;
+    const initSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
-        if (session?.user) await loadProfileIntoUser(session.user);
-        else { setUser(null); setMustChangePassword(false); }
-      } catch (e) { console.error("Auth init error:", e); } finally { if (mounted) setLoading(false); }
-
-      const { data } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-        if (event === "INITIAL_SESSION") return;
-        if (!mounted) return;
-        setLoading(true);
-        try {
-          if (session?.user) await loadProfileIntoUser(session.user);
-          else { setUser(null); setMustChangePassword(false); }
-        } catch (e) { console.error("Auth change error:", e); } finally { if (mounted) setLoading(false); }
+        if (session?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
+        } else { if (mounted) setUser(null); }
+      } finally { if (mounted) setLoading(false); }
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'INITIAL_SESSION') return;
+        if (mounted) setLoading(true);
+        if (session?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
+        } else { if (mounted) setUser(null); }
+        if (mounted) setLoading(false);
       });
-      sub = data.subscription;
+      authSubscription = data.subscription;
     };
-    void init();
-    return () => { mounted = false; if (sub) sub.unsubscribe(); };
+    initSession();
+    return () => { mounted = false; if (authSubscription) authSubscription.unsubscribe(); };
   }, []);
-
-  return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refresh, role: user?.role, mustChangePassword, permissions, isAuthenticated: !!user }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role, isAuthenticated: !!user }}>{children}</AuthContext.Provider>;
 };
 export const useAuth = () => useContext(AuthContext);

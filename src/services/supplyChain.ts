@@ -1,10 +1,6 @@
 // @ts-nocheck
-/**
- * Safe mock implementations of supply chain functions to prevent Vite build crashes.
- * Required by FinanceReconPage.tsx, TraceTimeline.tsx, etc.
- */
-export const traceByWayId = async (id: any) => { console.log("traceByWayId", id); return []; };
-export const listPendingCod = async (...args: any[]) => { console.log("listPendingCod", args); return []; };
-export const createDeposit = async (...args: any[]) => { console.log("createDeposit", args); return { success: true }; };
-export const createCodCollection = async (...args: any[]) => { console.log("createCodCollection", args); return { success: true }; };
-export const recordSupplyEvent = async (...args: any[]) => { console.log("recordSupplyEvent", args); return { success: true }; };
+export const traceByWayId = async (id: any) => [];
+export const listPendingCod = async (...args: any[]) => [];
+export const createDeposit = async (...args: any[]) => ({ success: true });
+export const createCodCollection = async (...args: any[]) => ({ success: true });
+export const recordSupplyEvent = async (...args: any[]) => ({ success: true });

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Download, History, Key, Lock, RefreshCw, Search, ShieldCheck, Upload, UserCog, UserPlus, XCircle, Inbox } from "lucide-react";
 import { notify } from "@/lib/notify";
-import { DEFAULT_ROLES, PERMISSIONS, STORAGE_KEY, type Account, type AccountStatus, type Permission, type Role, type AuthorityRequest, activeGrantsFor, can, canApplyAuthorityDirect, canRequestAuthorityChange, csvParse, csvStringify, defaultPortalPermissionsForRole, defaultGovernancePermissionsForRole, effectivePermissions, ensureAtLeastOneSuperAdminActive, getAccountByEmail, grantDirect, isEmailValid, loadStore, nowIso, pushAudit, rejectAuthorityRequest, requestAuthorityChange, revokeDirect, roleIsPrivileged, safeLower, saveStore, approveAuthorityRequest, uuid } from "@/lib/accountControlStore";
+import { DEFAULT_ROLES, PERMISSIONS, STORAGE_KEY, type Account, type AccountStatus, type Permission, type Role, type AuthorityRequest, activeGrantsFor, can, canGrantPermission, canApplyAuthorityDirect, canRequestAuthorityChange, csvParse, csvStringify, defaultPortalPermissionsForRole, defaultGovernancePermissionsForRole, effectivePermissions, ensureAtLeastOneSuperAdminActive, getAccountByEmail, grantDirect, isEmailValid, loadStore, nowIso, pushAudit, rejectAuthorityRequest, requestAuthorityChange, revokeDirect, roleIsPrivileged, safeLower, saveStore, approveAuthorityRequest, uuid } from "@/lib/accountControlStore";
 
 type Toast = { type: "ok" | "err" | "warn"; msg: string };
 type View = "ACCOUNTS" | "AUTH_REQUESTS" | "AUDIT";

@@ -1,0 +1,485 @@
+// @ts-nocheck
+import React, { useEffect, useMemo, useState, createContext, useContext } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Copy, Download, Globe, Loader2, Lock, Mail, RefreshCw, ShieldCheck, UserPlus } from "lucide-react";
+
+// ============================================================================
+// STABLE ICONS (To prevent lucide-react version mismatch errors)
+// ============================================================================
+const AlertIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <circle cx="12" cy="12" r="10" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+  </svg>
+);
+
+const CheckIcon = ({ className = "" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <circle cx="12" cy="12" r="10" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+// ============================================================================
+// INLINED DEPENDENCIES TO FIX BUILD ERRORS & SUPPORT SINGLE-FILE EXECUTION
+// ============================================================================
+
+const SUPABASE_CONFIGURED = false;
+
+// Mocked Supabase to avoid build errors from missing "@supabase/supabase-js"
+const supabase = {
+  auth: {
+    signInWithPassword: async () => ({ data: { user: { id: "1" } }, error: new Error("System not connected to database.") }),
+    signInWithOtp: async () => ({ data: {}, error: new Error("System not connected to database.") }),
+    verifyOtp: async () => ({ data: {}, error: new Error("System not connected to database.") }),
+    signUp: async () => ({ data: {}, error: new Error("System not connected to database.") }),
+    updateUser: async () => ({ data: { user: { id: "1" } }, error: new Error("System not connected to database.") }),
+    getSession: async () => ({ data: { session: null }, error: null }),
+    signOut: async () => ({ error: null }),
+    mfa: {
+      getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: "aal1" }, error: null }),
+      listFactors: async () => ({ data: { all: [] }, error: null }),
+      enroll: async () => ({ data: { id: "factor_1", totp: { qr_code: "<svg></svg>", secret: "SECRET" } }, error: null }),
+      challenge: async () => ({ data: { id: "challenge_1" }, error: null }),
+      verify: async () => ({ data: {}, error: null }),
+    }
+  },
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        maybeSingle: async () => ({ data: { role: "GUEST", must_change_password: false }, error: null })
+      })
+    }),
+    update: () => ({
+      eq: async () => ({ data: {}, error: null })
+    })
+  })
+};
+
+function getRememberMe(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = window.localStorage.getItem("be_remember_me");
+  return v === null ? true : v === "1";
+}
+
+function setRememberMe(remember: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem("be_remember_me", remember ? "1" : "0");
+}
+
+function normalizeRole(role?: string | null): string {
+  const r = (role ?? "").trim().toUpperCase();
+  if (!r) return "GUEST";
+  if (r.startsWith("SUPER")) return "SUPER_ADMIN";
+  if (r.startsWith("APP")) return "APP_OWNER";
+  if (r.startsWith("SYS")) return "SYS";
+  return r;
+}
+
+function defaultPortalForRole(role?: string | null): string {
+  const r = normalizeRole(role);
+  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "/portal/admin";
+  return "/portal/operations";
+}
+
+async function notify(event: string, payload: Record<string, unknown>, actorEmail?: string) {
+  console.log(`[NOTIFY] ${event}`, payload);
+}
+
+// --- CONTEXTS ---
+const LanguageContext = createContext({ lang: "en", setLanguage: (l: string) => {}, toggleLang: () => {} });
+function useLanguage() { return useContext(LanguageContext); }
+
+const AuthContext = createContext({ user: null, role: "GUEST", loading: false, isAuthenticated: false, refresh: async () => {} });
+function useAuth() { return useContext(AuthContext); }
+
+// --- UI COMPONENTS ---
+const Button = React.forwardRef<HTMLButtonElement, any>(({ className = "", variant = "default", size = "default", ...props }, ref) => {
+  const base = "inline-flex items-center justify-center gap-2 rounded-xl font-black uppercase tracking-widest transition-colors disabled:opacity-50 disabled:pointer-events-none";
+  const variants: Record<string, string> = { default: "bg-emerald-600 hover:bg-emerald-500 text-white", outline: "border border-white/10 bg-black/40 hover:bg-white/5 text-slate-200", ghost: "bg-transparent hover:bg-white/5 text-slate-200" };
+  const sizes: Record<string, string> = { default: "h-11 px-4 text-xs", lg: "h-14 px-8 text-sm", sm: "h-9 px-3 text-[11px]" };
+  return <button ref={ref} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props} />;
+});
+Button.displayName = "Button";
+
+function Card({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) { return <div className={`rounded-2xl border border-white/10 bg-[#0B101B] ${className}`} {...props} />; }
+function CardHeader({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) { return <div className={`p-6 pb-2 ${className}`} {...props} />; }
+function CardTitle({ className = "", ...props }: React.HTMLAttributes<HTMLHeadingElement>) { return <h3 className={`text-lg font-black tracking-widest uppercase ${className}`} {...props} />; }
+function CardContent({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) { return <div className={`p-6 pt-2 ${className}`} {...props} />; }
+
+const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className = "", ...props }, ref) => {
+  return <input ref={ref} className={`w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-emerald-500/40 ${className}`} {...props} />;
+});
+Input.displayName = "Input";
+
+function Separator({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) { return <div className={`h-px w-full bg-white/10 ${className}`} {...props} />; }
+
+// ============================================================================
+// LOGIN COMPONENT
+// ============================================================================
+
+type View = "login" | "forgot" | "request" | "force_change" | "mfa" | "magic" | "otp_verify";
+const MFA_REQUIRED_ROLES = new Set(["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "ADM", "MGR", "ADMIN"]);
+
+async function loadProfile(userId: string) {
+  const trySelect = async (sel: string) => supabase.from("profiles").select(sel).eq("id", userId).maybeSingle();
+  let { data, error } = await trySelect("id, role, role_code, app_role, user_role, must_change_password, requires_password_change");
+  if (error && (error as any).code === "42703") { ({ data, error } = await trySelect("id, role, must_change_password")); }
+  if (error) return { role: "GUEST", mustChange: false };
+  const row: any = data || {};
+  const rawRole = row.role ?? row.app_role ?? row.user_role ?? row.role_code ?? "GUEST";
+  const mustChange = Boolean(row.must_change_password) || Boolean(row.requires_password_change);
+  return { role: normalizeRole(rawRole), mustChange };
+}
+
+async function hasAal2() {
+  try {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) return false;
+    return data?.currentLevel === "aal2";
+  } catch { return false; }
+}
+
+export default function Login() {
+  const nav = useNavigate();
+  const loc = useLocation() as any;
+  const auth = useAuth();
+  const { lang, setLanguage, toggleLang } = useLanguage();
+  const [currentLang, setCurrentLang] = useState(lang || "en");
+  const t = (en: string, my: string) => (currentLang === "en" ? en : my);
+
+  const [view, setView] = useState<View>("login");
+  const [loading, setLoading] = useState(false);
+  const [configMissing, setConfigMissing] = useState(false);
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState<boolean>(() => getRememberMe());
+  
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [otpToken, setOtpToken] = useState("");
+  const [otpHint, setOtpHint] = useState("");
+  
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [targetPath, setTargetPath] = useState<string>("/");
+
+  const [mfaStage, setMfaStage] = useState<"idle" | "enroll" | "verify">("idle");
+  const [mfaFactorId, setMfaFactorId] = useState<string>("");
+  const [mfaChallengeId, setMfaChallengeId] = useState<string>("");
+  const [mfaQrSvg, setMfaQrSvg] = useState<string>("");
+  const [mfaSecret, setMfaSecret] = useState<string>("");
+
+  const brand = useMemo(() => ({ title: "BRITIUM", subtitleEn: "Welcome to Britium Portal", subtitleMy: "Britium Portal သို့ ကြိုဆိုပါသည်" }), []);
+  
+  useEffect(() => { if (lang) setCurrentLang(lang); }, [lang]);
+  const toggleLanguage = () => { const next = currentLang === "en" ? "my" : "en"; setCurrentLang(next); if (typeof setLanguage === "function") setLanguage(next); else if (typeof toggleLang === "function") toggleLang(); };
+  const clearMessages = () => { setErrorMsg(""); setSuccessMsg(""); };
+
+  async function goAfterAuth(role?: string) {
+    const from = loc?.state?.from;
+    const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(role);
+    setTargetPath(dst);
+    nav(dst, { replace: true });
+  }
+
+  async function ensureMfa(role?: string) {
+    const r = normalizeRole(role);
+    if (!MFA_REQUIRED_ROLES.has(r)) return true;
+    const ok = await hasAal2();
+    if (ok) return true;
+    setView("mfa");
+    await prepareMfa();
+    return false;
+  }
+
+  async function prepareMfa() {
+    setMfaStage("idle"); setOtpToken(""); setMfaQrSvg(""); setMfaSecret(""); setMfaFactorId(""); setMfaChallengeId("");
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (error) throw error;
+      const totpFactors = (data?.totp || data?.all || []) as any[];
+      const verified = totpFactors.find((f) => (f?.status || "").toLowerCase() === "verified") || totpFactors[0];
+
+      if (verified?.id) {
+        const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: verified.id });
+        if (chErr) throw chErr;
+        setMfaFactorId(verified.id); setMfaChallengeId(ch?.id || ""); setMfaStage("verify");
+        setSuccessMsg(t("Enter your 6-digit authenticator code.", "Authenticator code (၆ လုံး) ကို ထည့်ပါ။"));
+        return;
+      }
+      const { data: enr, error: enrErr } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      if (enrErr) throw enrErr;
+      setMfaFactorId(enr?.id || ""); setMfaQrSvg(enr?.totp?.qr_code || ""); setMfaSecret(enr?.totp?.secret || "");
+      const { data: ch2, error: ch2Err } = await supabase.auth.mfa.challenge({ factorId: enr.id });
+      if (ch2Err) throw ch2Err;
+      setMfaChallengeId(ch2?.id || ""); setMfaStage("enroll");
+      setSuccessMsg(t("Scan QR with authenticator app, then enter the code.", "Authenticator နဲ့ QR စကန်ပြီး code ထည့်ပါ။"));
+    } catch (e: any) { setErrorMsg(e?.message || t("MFA setup failed.", "MFA စတင်မရပါ။")); setMfaStage("idle"); } finally { setLoading(false); }
+  }
+
+  async function verifyMfa(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!otpToken || otpToken.trim().length < 6) return setErrorMsg(t("Enter the 6-digit code.", "Code ၆ လုံး ထည့်ပါ။"));
+    setLoading(true);
+    try {
+      const code = otpToken.trim().replace(/\s+/g, "");
+      const { error } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: mfaChallengeId, code });
+      if (error) throw error;
+      const ok = await hasAal2();
+      if (!ok) throw new Error("MFA verification incomplete.");
+      setSuccessMsg(t("MFA verified. Redirecting…", "MFA အောင်မြင်ပါပြီ။ ဆက်သွားနေသည်…"));
+      setTimeout(() => nav(targetPath || "/", { replace: true }), 400);
+    } catch (e: any) { setErrorMsg(e?.message || t("Invalid code.", "Code မမှန်ပါ။")); } finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    (async () => {
+      const ok = Boolean(SUPABASE_CONFIGURED); setConfigMissing(!ok); if (!ok) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const userId = data?.session?.user?.id;
+        if (!userId) return;
+        const prof = await loadProfile(userId);
+        const from = loc?.state?.from;
+        const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(prof.role);
+        setTargetPath(dst);
+        if (prof.mustChange) { setView("force_change"); return; }
+        const need = MFA_REQUIRED_ROLES.has(normalizeRole(prof.role));
+        if (need) { const okAal = await hasAal2(); if (!okAal) { setView("mfa"); await prepareMfa(); return; } }
+        nav(dst, { replace: true });
+      } catch {}
+    })();
+  }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System configuration is missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      setRememberMe(remember);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await auth.refresh?.();
+      const prof = await loadProfile(data.user?.id || "");
+      const dst = defaultPortalForRole(prof.role);
+      setTargetPath(dst);
+      const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
+      if (prof.mustChange || isDefault) { setView("force_change"); setLoading(false); return; }
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      await goAfterAuth(prof.role);
+    } catch (e: any) { setErrorMsg(t("Access Denied: Invalid credentials.", "ဝင်ရောက်ခွင့် ငြင်းပယ်ခံရသည်: အချက်အလက်မှားနေသည်။")); } finally { setLoading(false); }
+  }
+
+  async function handleMagicSend(e: React.FormEvent) {
+    e.preventDefault(); clearMessages(); setLoading(true);
+    try {
+      const emailRedirectTo = `${window.location.origin}/login`;
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+      if (error) throw error;
+      setSuccessMsg(t("Secure link sent. Check your email.", "လုံခြုံသော link ပို့ပြီးပါပြီ။ Email စစ်ပါ။"));
+      setOtpHint(t("If your email contains a 6-digit code, enter it below.", "Email ထဲတွင် ကုဒ် ၆ လုံးပါပါက အောက်တွင်ထည့်ပါ။"));
+      setView("otp_verify");
+    } catch (e: any) { setErrorMsg(e?.message || t("Failed to send link.", "Link ပို့မရပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleOtpVerify(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!otpToken.trim()) { setErrorMsg(t("Enter the code to continue.", "ဆက်လက်လုပ်ဆောင်ရန် ကုဒ်ထည့်ပါ။")); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email, token: otpToken.trim(), type: "email" });
+      if (error) throw error;
+      if (auth?.refresh) await auth.refresh();
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session?.user?.id) throw new Error("No session.");
+      const prof = await loadProfile(data.session.user.id);
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      await goAfterAuth(prof.role);
+    } catch (e: any) { setErrorMsg(e?.message || t("OTP invalid.", "OTP ကုဒ် မှားယွင်းနေသည်။")); } finally { setLoading(false); }
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System config missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      setSuccessMsg(t("Recovery link sent. Please check your email.", "Recovery link ကို ပို့ပြီးပါပြီ။ အီးမေးလ်ကို စစ်ပါ။"));
+    } catch (e: any) { setErrorMsg(e?.message || t("Unable to send recovery email.", "Recovery email ပို့မရပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleRequestAccess(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System config missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      
+      void notify("ACCOUNT_REQUEST_CREATED", { email, role: "PENDING", note: "Self-registered via Login portal" }, email);
+
+      setSuccessMsg(t("Request submitted. Please verify your email if prompted.", "Request တင်ပြီးပါပြီ။ လိုအပ်ပါက အီးမေးလ်အတည်ပြုပါ။"));
+      setTimeout(() => setView("login"), 900);
+    } catch (e: any) { setErrorMsg(e?.message || t("Request failed.", "Request မအောင်မြင်ပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleForceChange(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (newPassword !== confirmPassword) return setErrorMsg(t("Passwords do not match.", "စကားဝှက် မကိုက်ညီပါ။"));
+    if (newPassword.length < 8) return setErrorMsg(t("Password must be at least 8 characters.", "စကားဝှက်သည် အနည်းဆုံး ၈ လုံး ဖြစ်ရမည်။"));
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      try { await supabase.from("profiles").update({ must_change_password: false, requires_password_change: false }).eq("id", data.user?.id || ""); } catch {}
+      await auth.refresh?.();
+      const prof = await loadProfile(data.user?.id || "");
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      setSuccessMsg(t("Password updated. Redirecting…", "စကားဝှက်ပြောင်းပြီးပါပြီ။ ဆက်သွားနေသည်…"));
+      setTimeout(() => goAfterAuth(prof.role), 450);
+    } catch (e: any) { setErrorMsg(e?.message || t("Password update failed.", "စကားဝှက်ပြောင်းမရပါ။")); } finally { setLoading(false); }
+  }
+
+  const wizardViews: View[] = ["login", "magic", "forgot", "request"];
+  const wizardIndex = wizardViews.indexOf(view);
+  const showWizardNav = wizardIndex >= 1;
+  const prevTarget: View = wizardIndex > 0 ? wizardViews[wizardIndex - 1] : "login";
+  const nextTarget: View = wizardIndex >= 0 && wizardIndex < wizardViews.length - 1 ? wizardViews[wizardIndex + 1] : view;
+  const canPrev = showWizardNav && !loading;
+  const canNext = showWizardNav && wizardIndex < wizardViews.length - 1 && !loading;
+  const goPrev = () => { clearMessages(); setView(prevTarget); };
+  const goNext = () => { if (!canNext) return; clearMessages(); setView(nextTarget); };
+
+  const pageTitle = useMemo(() => {
+    if (view === "forgot") return t("Secure Password Recovery", "စကားဝှက် ပြန်လည်ရယူခြင်း");
+    if (view === "request") return t("Request Access", "ဝင်ရောက်ခွင့် တောင်းမည်");
+    if (view === "force_change") return t("Security Update Required", "လုံခြုံရေး အပ်ဒိတ် လိုအပ်");
+    if (view === "mfa") return t("Multi-Factor Verification", "အဆင့်မြင့် အတည်ပြုခြင်း (MFA)");
+    return t("Sign in", "အကောင့်ဝင်မည်");
+  }, [view, currentLang]);
+
+  return (
+    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#05080F] p-4 text-slate-100">
+      
+      <div className="absolute top-6 right-6 z-20">
+        <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full"><Globe className="h-4 w-4 mr-2" /><span className="text-xs font-black tracking-widest uppercase">{currentLang === "en" ? "MY" : "EN"}</span></Button>
+      </div>
+
+      <div className="relative z-10 w-full max-w-md space-y-6 py-12">
+        <div className="text-center space-y-2">
+          <div className="mx-auto h-24 w-24 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl"><img src="/logo.png" alt="Britium" className="h-16 w-16 object-contain" /></div>
+          <h1 className="text-4xl font-black tracking-tight text-white">{brand.title}</h1>
+          <p className="text-sm text-slate-300">{t("Enterprise Portal", "Enterprise Portal")}</p>
+        </div>
+
+        {configMissing ? (
+          <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[1.75rem] overflow-hidden shadow-2xl">
+            <CardHeader><CardTitle className="flex items-center gap-2 text-rose-400"><AlertIcon className="h-5 w-5" />{t("Missing Configuration", "Config မရှိပါ")}</CardTitle></CardHeader>
+            <CardContent className="space-y-4"><div className="text-sm text-slate-300">{t("Set env vars: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_URL နှင့် VITE_SUPABASE_ANON_KEY ကို ထည့်ပါ")}</div></CardContent>
+          </Card>
+        ) : (
+          <>
+            <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-600 to-teal-400" />
+              <CardContent className="p-7 md:p-8 space-y-5">
+                {errorMsg && (<div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-300"><AlertIcon className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{errorMsg}</p></div>)}
+                {successMsg && (<div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-300"><CheckIcon className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{successMsg}</p></div>)}
+
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                  <div className="font-extrabold uppercase tracking-widest text-sm">{pageTitle}</div>
+                </div>
+
+                {(view === "login" || view === "magic" || view === "otp_verify") && (
+                  <div className="flex gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                    <Button type="button" variant={view === "login" ? "default" : "ghost"} className={view === "login" ? "bg-emerald-600 hover:bg-emerald-500 text-white flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("login"); }}>{t("Password", "စကားဝှက်")}</Button>
+                    <Button type="button" variant={view !== "login" ? "default" : "ghost"} className={view !== "login" ? "bg-[#D4AF37] hover:bg-[#b5952f] text-black flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("magic"); }}>{t("Email Link", "အီးမေးလ်")}</Button>
+                  </div>
+                )}
+
+                {view === "login" && (
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Password", "စကားဝှက်")} /></div>
+                    <div className="flex items-center justify-between px-1">
+                      <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold cursor-pointer"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-emerald-500" />{t("Remember me", "မှတ်ထားမည်")}</label>
+                      <div className="flex items-center gap-3 text-[11px] font-black"><button type="button" onClick={() => { clearMessages(); setView("forgot"); }} className="text-slate-400 hover:text-emerald-300 uppercase tracking-widest">{t("Forgot?", "မေ့သွားလား")}</button><button type="button" onClick={() => { clearMessages(); setView("request"); }} className="text-[#D4AF37] hover:text-[#b5952f] uppercase tracking-widest flex items-center gap-1"><UserPlus className="h-3 w-3" /> {t("Sign Up", "အကောင့်လုပ်မည်")}</button></div>
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-2">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Authenticating…", "စစ်ဆေးနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Login", "ဝင်မည်")} <ArrowRight className="h-4 w-4" /></span>}</Button>
+                  </form>
+                )}
+
+                {view === "magic" && (
+                  <form onSubmit={handleMagicSend} className="space-y-5">
+                    <div className="text-[11px] text-slate-400 px-2 leading-relaxed italic">{t("System will dispatch a one-time secure link to your work inbox.", "စနစ်မှ တစ်ခါသုံး လုံခြုံရေး link ကို သင့်အီးမေးလ်သို့ ပို့ပေးပါမည်။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-2xl shadow-xl transition-all">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Send Link", "Link ပို့မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "otp_verify" && (
+                  <form onSubmit={handleOtpVerify} className="space-y-5">
+                    <div className="text-xs text-emerald-400 font-bold px-2">{otpHint}</div>
+                    <div className="relative"><ShieldCheck className="absolute left-4 top-4 h-5 w-5 text-slate-500" /><Input required value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white font-mono tracking-[0.5em] text-center" placeholder="000000" maxLength={6} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-2xl">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Verify & Login", "အတည်ပြုပြီး ဝင်မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "forgot" && (
+                  <form onSubmit={handleForgot} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Enter email to receive recovery link.", "Recovery link ရယူရန် email ထည့်ပါ။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-slate-700 hover:bg-slate-600 text-white font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Sending…", "ပို့နေသည်…")}</span> : t("Send Recovery Link", "Recovery Link ပို့မည်")}</Button>
+                    <Button type="button" variant="ghost" onClick={() => { clearMessages(); setView("login"); }} className="w-full">{t("Back", "နောက်ပြန်")}</Button>
+                  </form>
+                )}
+
+                {view === "request" && (
+                  <form onSubmit={handleRequestAccess} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Submit request to create account.", "အကောင့်ဖန်တီးရန် request တင်ပါ။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Work Email", "အလုပ်အီးမေးလ်")} /></div>
+                    <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Submitting…", "တင်နေသည်…")}</span> : t("Submit Request", "Request တင်မည်")}</Button>
+                    <Button type="button" variant="ghost" onClick={() => { clearMessages(); setView("login"); }} className="w-full">{t("Back", "နောက်ပြန်")}</Button>
+                  </form>
+                )}
+
+                {view === "force_change" && (
+                  <form onSubmit={handleForceChange} className="space-y-4">
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">{t("Password update required.", "စကားဝှက်ပြောင်းရန်လိုအပ်ပါသည်။")}</div>
+                    <Input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("New Password", "စကားဝှက်အသစ်")} />
+                    <Input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("Confirm Password", "အတည်ပြုပါ")} />
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-amber-600 hover:bg-amber-500 text-white font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : t("Update & Continue", "ပြောင်းပြီးဆက်သွားမည်")}</Button>
+                  </form>
+                )}
+
+                {/* Wizard Nav */}
+                {showWizardNav && (
+                  <div className="flex items-center justify-between pt-2">
+                    <Button type="button" variant="ghost" disabled={!canPrev} onClick={goPrev} className="h-11 px-4 rounded-xl text-slate-300 hover:text-white disabled:opacity-40"><ArrowLeft className="h-4 w-4 mr-2" /> {t("Previous", "နောက်ပြန်")}</Button>
+                    <Button type="button" disabled={!canNext} onClick={goNext} className="h-11 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest disabled:opacity-40">{t("Next", "ရှေ့သို့")} <ArrowRight className="h-4 w-4 ml-2" /></Button>
+                  </div>
+                )}
+
+                <Separator className="bg-white/10" />
+                
+                <div className="text-center text-[10px] text-slate-500 font-bold opacity-60 mt-4">
+                  © {new Date().getFullYear()} Britium Enterprise • {t("All rights reserved.", "မူပိုင်ခွင့်ရယူထားသည်။")}
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

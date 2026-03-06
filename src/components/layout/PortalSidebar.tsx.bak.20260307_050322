@@ -6,7 +6,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { NAV_SECTIONS, flatByPath, type NavItem, type NavSection } from "@/lib/portalRegistry";
 import { allowedByRole, hasAnyPermission, normalizeRole } from "@/lib/permissionResolver";
 import { clearRecentNav, getRecentNav, pushRecent, type RecentNavItem } from "@/lib/recentNav";
-import { Search, History, Trash2 } from "lucide-react";
+import { Search, Clock, Trash2, X, History } from "lucide-react";
+import { loadStore, getAccountByEmail, effectivePermissions, roleIsPrivileged } from "@/lib/accountControlStore";
 
 function filterTree(auth: any, item: NavItem): NavItem | null {
   if (!allowedByRole(auth, item.allowRoles)) return null;

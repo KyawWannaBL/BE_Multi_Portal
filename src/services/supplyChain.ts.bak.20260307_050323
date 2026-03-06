@@ -1,0 +1,71 @@
+// @ts-nocheck
+/**
+ * Supply Chain Service (EN/MM)
+ * EN: Build-stable stubs. Replace with Supabase/RPC later.
+ * MY: Build မပျက်အောင် stub များ။ နောက်မှ Supabase/RPC နဲ့ အစားထိုးနိုင်။
+ */
+
+export type SupplyEvent = {
+  id?: string;
+  way_id?: string;
+  shipment_id?: string;
+  event_type?: string;
+  notes?: string;
+  at?: string;
+  meta?: any;
+};
+
+export type CodItem = {
+  way_id: string;
+  shipment_id?: string;
+  cod_amount?: number;
+  status?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_city?: string;
+};
+
+export async function traceByWayId(wayId: any): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] traceByWayId:", wayId);
+  return [];
+}
+
+export async function listPendingCod(...args: any[]): Promise<CodItem[]> {
+  console.log("[supplyChain] listPendingCod:", args);
+  return [];
+}
+
+export async function createDeposit(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createDeposit:", args);
+  return { success: true, id: `dep_${Date.now()}` };
+}
+
+export async function createCodCollection(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createCodCollection:", args);
+  return { success: true, id: `cod_${Date.now()}` };
+}
+
+export async function recordSupplyEvent(...args: any[]): Promise<{ success: boolean }> {
+  console.log("[supplyChain] recordSupplyEvent:", args);
+  return { success: true };
+}
+
+/** ✅ used by src/components/supplychain/QROpsConsole.tsx */
+export async function listMyRecentEvents(...args: any[]): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] listMyRecentEvents:", args);
+  return [];
+}
+
+/** EN/MM: compatibility aliases */
+export const listPendingCOD = listPendingCod;
+export const recordEvent = recordSupplyEvent;
+export const listRecentEvents = listMyRecentEvents;
+
+export default {
+  traceByWayId,
+  listPendingCod,
+  createDeposit,
+  createCodCollection,
+  recordSupplyEvent,
+  listMyRecentEvents,
+};
