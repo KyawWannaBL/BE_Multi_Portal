@@ -23,3 +23,6 @@ export async function listMyRecentEvents(limit = 20) {
   if (error) throw error;
   return data;
 }
+
+export const traceByWayId = async (id: any) => [];
+
