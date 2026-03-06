@@ -23,7 +23,6 @@ export type NavItem = {
   path: string;
   icon: LucideIcon;
   allowRoles?: string[];
-  requiredPermissions?: string[];
   children?: NavItem[];
 };
 
@@ -71,9 +70,9 @@ export const NAV_SECTIONS: NavSection[] = [
         allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN"],
         children: [
           { id: "sa_exec", label_en: "Executive Command", label_mm: "Executive Command", path: "/portal/admin/executive", icon: ShieldAlert },
-          { id: "sa_accounts", label_en: "Account Control", label_mm: "အကောင့်စီမံခန့်ခွဲမှု", path: "/portal/admin/accounts", icon: UserCheck, requiredPermissions: ["AUTHORITY_MANAGE"] },
+          { id: "sa_accounts", label_en: "Account Control", label_mm: "အကောင့်စီမံခန့်ခွဲမှု", path: "/portal/admin/accounts", icon: UserCheck },
           { id: "sa_admin_dash", label_en: "Admin Dashboard", label_mm: "Admin Dashboard", path: "/portal/admin/dashboard", icon: ClipboardList },
-          { id: "sa_audit", label_en: "Audit Logs", label_mm: "Audit Logs", path: "/portal/admin/audit", icon: ShieldAlert, requiredPermissions: ["AUDIT_READ"] },
+          { id: "sa_audit", label_en: "Audit Logs", label_mm: "Audit Logs", path: "/portal/admin/audit", icon: ShieldAlert },
           { id: "sa_users", label_en: "Admin Users", label_mm: "Admin Users", path: "/portal/admin/users", icon: Users },
           { id: "sa_perm", label_en: "Permission Assignment", label_mm: "Permission Assignment", path: "/portal/admin/permission-assignment", icon: KeyRound },
         ],

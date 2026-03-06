@@ -9,15 +9,12 @@ type Rule = { prefix: string; required?: string[] };
 
 function collectRules(): Rule[] {
   const rules: Rule[] = [];
-
   const walk = (item: NavItem, inherited?: string[]) => {
     const req = (item.requiredPermissions && item.requiredPermissions.length ? item.requiredPermissions : inherited) ?? inherited;
     rules.push({ prefix: item.path, required: req });
     for (const c of item.children ?? []) walk(c, req);
   };
-
   for (const sec of NAV_SECTIONS) for (const it of sec.items) walk(it);
-
   rules.sort((a, b) => b.prefix.length - a.prefix.length);
   return rules;
 }
@@ -46,7 +43,6 @@ export function RequireAuthz() {
     return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
   }
 
-  // Registry enforcement (NO SQL)
   const store = typeof window !== "undefined" ? loadStore() : null;
   const actor = store && email ? getAccountByEmail(store.accounts, email) : undefined;
 
@@ -58,45 +54,22 @@ export function RequireAuthz() {
     return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
   }
 
-  // Privileged bypass
   if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) {
     return <Outlet />;
   }
 
-  // Permission check (delegated perms + auth perms)
   if (required && required.length) {
-    // Use hasAnyPermission resolver (already unions delegated perms) on auth shape.
     const ok = hasAnyPermission(auth, required);
-
-    // Extra safety: if auth permissions missing, fall back to registry grants
     if (!ok && store) {
       const perms = effectivePermissions(store, actor);
       const requiredSet = new Set(required.map((x) => String(x)));
       let ok2 = false;
       for (const g of perms) if (requiredSet.has(String(g))) ok2 = true;
       if (!ok2) {
-        return (
-          <Navigate
-            to="/unauthorized"
-            replace
-            state={{
-              reason: "NO_PERMISSION",
-              detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}`,
-            }}
-          />
-        );
+        return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
       }
     } else if (!ok) {
-      return (
-        <Navigate
-          to="/unauthorized"
-          replace
-          state={{
-            reason: "NO_PERMISSION",
-            detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}`,
-          }}
-        />
-      );
+      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
     }
   }
 

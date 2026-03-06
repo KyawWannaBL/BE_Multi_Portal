@@ -2,7 +2,8 @@ import React, { Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
-import { RequireAuthz } from "./routes/RequireAuthz";
+import { RequireAuth } from "./routes/RequireAuth";
+import { RequireRole } from "./routes/RequireRole";
 
 import EnterprisePortal from "./pages/EnterprisePortal";
 import Login from "./pages/Login";
@@ -63,16 +64,16 @@ export default function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/unauthorized" element={<Unauthorized />} />
 
-              <Route element={<RequireAuthz />}>
+              <Route element={<RequireAuth />}>
                 {/* SUPER ADMIN PORTAL HUB */}
-                <Route path="/portal/admin" element={<SuperAdminPortal />} />
-                <Route path="/portal/admin/executive" element={<ExecutiveCommandCenter />} />
+                <Route path="/portal/admin" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><SuperAdminPortal /></RequireRole>} />
+                <Route path="/portal/admin/executive" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><ExecutiveCommandCenter /></RequireRole>} />
                 
-                <Route path="/portal/admin/accounts" element={<AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/dashboard" element={<AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/audit" element={<AdminModuleWrapper title="Audit Logs"><AuditLogs /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/users" element={<AdminModuleWrapper title="Admin Users"><AdminUsers /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/permission-assignment" element={<AdminModuleWrapper title="Permission Assignment"><PermissionAssignment /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/accounts" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper></RequireRole>} />
+                <Route path="/portal/admin/dashboard" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper></RequireRole>} />
+                <Route path="/portal/admin/audit" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Audit Logs"><AuditLogs /></AdminModuleWrapper></RequireRole>} />
+                <Route path="/portal/admin/users" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Admin Users"><AdminUsers /></AdminModuleWrapper></RequireRole>} />
+                <Route path="/portal/admin/permission-assignment" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Permission Assignment"><PermissionAssignment /></AdminModuleWrapper></RequireRole>} />
 
                 {/* LEGACY/OTHER PORTALS */}
                 <Route path="/portal/admin-legacy" element={<AdminPortal />} />
