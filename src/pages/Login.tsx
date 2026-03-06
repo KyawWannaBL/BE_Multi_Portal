@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, setRememberMe, getRememberMe } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, getRememberMe, setRememberMe } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ export default function Login() {
   const [remember, setRemember] = useState(getRememberMe());
   const [errorMsg, setErrorMsg] = useState("");
   const [apkMeta, setApkMeta] = useState({ size: '...', updated: '...' });
-  const hasCheckedInitial = useRef(false);
 
   const t = (en: string, my: string) => lang === "en" ? en : my;
 
@@ -36,33 +35,20 @@ export default function Login() {
   const canPrev = wIndex > 0;
   const canNext = wIndex >= 0 && wIndex < wizardViews.length - 1;
 
-  // PASSIVE AUTH LISTENER - Eliminates the API Race Condition
   useEffect(() => {
     let mounted = true;
-
-    // Hard fallback guarantees the boot screen dismisses
-    const hardTimeout = setTimeout(() => {
-      if (mounted) setIsBooting(false);
-    }, 2500);
-
+    
     if (!authLoading) {
-      if (!hasCheckedInitial.current) {
-        hasCheckedInitial.current = true;
-        if (user) {
-          navigate("/", { replace: true });
-        } else {
-          setTimeout(() => { if (mounted) setIsBooting(false); }, 500);
-        }
-      }
+       if (user) {
+         navigate("/", { replace: true });
+       } else {
+         setTimeout(() => { if (mounted) setIsBooting(false); }, 800);
+       }
     }
 
-    return () => { 
-      mounted = false; 
-      clearTimeout(hardTimeout);
-    };
+    return () => { mounted = false; };
   }, [authLoading, user, navigate]);
 
-  // APK Fetcher
   useEffect(() => {
     let mounted = true;
     fetch('/android.apk', { method: 'HEAD' }).then(res => {
@@ -70,7 +56,11 @@ export default function Login() {
       const len = res.headers.get('content-length');
       const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
       const lastMod = res.headers.get('last-modified');
-      const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
+      let updated = 'Recent';
+      if (lastMod) {
+         const d = new Date(lastMod);
+         if (!isNaN(d.getTime())) updated = d.toISOString().split('T')[0];
+      }
       if (mounted) setApkMeta({ size, updated });
     }).catch(() => {});
     return () => { mounted = false; };

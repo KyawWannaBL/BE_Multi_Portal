@@ -36,14 +36,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (mounted) setUser(null);
         }
       } catch (err) {
-        console.error("Auth initialization error:", err);
+        console.error("Auth init error:", err);
       } finally {
         if (mounted) setLoading(false);
       }
 
-      // Only attach listener AFTER initial fetch to prevent lock contention races
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'INITIAL_SESSION') return; // Handled above
+        if (event === 'INITIAL_SESSION') return; 
         
         if (mounted) setLoading(true);
         try {
@@ -58,7 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (mounted) setUser(null);
           }
         } catch (err) {
-          console.error("Auth state change error:", err);
+          console.error("Auth change error:", err);
         } finally {
           if (mounted) setLoading(false);
         }

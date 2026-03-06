@@ -8,7 +8,7 @@ import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import DashboardRedirect from "./pages/DashboardRedirect";
 
-// STATIC IMPORTS (Prevents white-screen crash from failed lazy loading)
+// STATIC IMPORTS to guarantee Vite builds cleanly
 import ExecutiveCommandCenter from "./pages/portals/admin/ExecutiveCommandCenter";
 import OperationsPortal from "./pages/portals/operations/OperationsPortal";
 import FinancePortal from "./pages/portals/finance/FinancePortal";
@@ -35,7 +35,6 @@ export default function App() {
               <Route path="/portal/execution" element={<ExecutionPortal />} />
             </Route>
 
-            {/* Catch-all safely hands off to the root router without looping */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
