@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, isSupabaseConfigured, getRememberMe, setRememberMe } from "@/lib/supabase";
+import { supabase, setRememberMe, getRememberMe } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ type View = "password" | "forgot" | "request" | "force_change" | "biometric_setu
 export default function Login() {
   const navigate = useNavigate();
   const { lang, toggleLang } = useLanguage();
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth(); // Read state from fixed context
   
   const [isBooting, setIsBooting] = useState(true);
   const [view, setView] = useState<View>("password");
@@ -35,28 +35,21 @@ export default function Login() {
   const canPrev = wIndex > 0;
   const canNext = wIndex >= 0 && wIndex < wizardViews.length - 1;
 
+  // Safe auto-redirect that checks context directly instead of hammering the DB lock
+  useEffect(() => {
+    if (!authLoading && user) {
+       navigate("/", { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
+  // Safe Boot Screen & APK Fetcher
   useEffect(() => {
     let mounted = true;
     
-    // HARD FALLBACK: Stops infinite spinners immediately
+    // HARD FALLBACK: Ensure the boot screen disappears no matter what happens
     const hardTimeout = setTimeout(() => {
       if (mounted) setIsBooting(false);
-    }, 2000);
-
-    const run = async () => {
-      try {
-        if (!isSupabaseConfigured) return;
-        const { data } = await supabase.auth.getSession();
-        if (data?.session && mounted) {
-          navigate("/", { replace: true });
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (mounted) setTimeout(() => setIsBooting(false), 500);
-      }
-    };
-    run();
+    }, 1500);
 
     fetch('/android.apk', { method: 'HEAD' }).then(res => {
       if (!res.ok || !mounted) return;
@@ -71,7 +64,7 @@ export default function Login() {
       mounted = false; 
       clearTimeout(hardTimeout);
     };
-  }, [navigate]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,9 +103,9 @@ export default function Login() {
       const { error } = await supabase.auth.updateUser({ password: newPass });
       if (error) throw error;
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
-         await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser?.id) {
+         await supabase.from('profiles').update({ must_change_password: false }).eq('id', currentUser.id);
       }
       setView("biometric_setup");
     } catch (err: any) {
@@ -122,8 +115,7 @@ export default function Login() {
     }
   };
 
-  const finalizeLogin = async () => {
-    // Rely on App.tsx root redirection to avoid loops
+  const finalizeLogin = () => {
     navigate("/", { replace: true });
   };
 

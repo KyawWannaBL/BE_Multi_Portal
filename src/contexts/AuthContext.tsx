@@ -19,30 +19,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    const loadSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (mounted) setUser({ 
-            ...session.user, 
-            profile: profile || {}, 
-            role: profile?.role || profile?.role_code || 'GUEST' 
-          });
-        } else {
-          if (mounted) setUser(null);
-        }
-      } catch (err) {
-        console.error("Auth init error:", err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    loadSession();
-
+    // FIX: Rely solely on onAuthStateChange (which fires INITIAL_SESSION automatically)
+    // This stops the dual-fire lock error seen in your console.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (_event === 'INITIAL_SESSION') return;
+      if (mounted) setLoading(true);
       try {
         if (session?.user) {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
