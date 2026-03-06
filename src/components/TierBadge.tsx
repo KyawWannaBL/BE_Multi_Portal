@@ -29,7 +29,7 @@ export default function TierBadge({ role, tierLevel, className }: { role?: strin
   };
 
   return (
-    <span className={`inline-flex items-center h-8 px-3 rounded-full border text-[11px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
+    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
       {tier}
     </span>
   );
