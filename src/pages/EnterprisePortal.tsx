@@ -16,6 +16,11 @@ export default function EnterprisePortal() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden text-slate-100 bg-[#05080F]">
+      {mounted && (
+        <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none">
+          <source src="/background.mp4" type="video/mp4" />
+        </video>
+      )}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.15),transparent_70%)]" />
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 

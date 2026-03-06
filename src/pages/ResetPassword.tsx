@@ -136,6 +136,9 @@ export default function ResetPassword() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#05080F] text-slate-100">
+      <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none grayscale">
+        <source src="/background.mp4" type="video/mp4" />
+      </video>
       <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
 
       <div className="absolute top-6 right-6 z-20">
