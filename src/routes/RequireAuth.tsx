@@ -3,7 +3,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function RequireAuth() {
-  const { user, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen bg-[#05080F] flex items-center justify-center">
@@ -11,5 +11,5 @@ export function RequireAuth() {
       </div>
     );
   }
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }

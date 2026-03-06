@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/supabaseClient';
 
 const AuthContext = createContext<any>({});
 
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

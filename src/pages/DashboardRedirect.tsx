@@ -14,7 +14,7 @@ export default function DashboardRedirect() {
     }
     
     const r = (role || 'GUEST').toUpperCase();
-    if (["SUPER_ADMIN", "APP_OWNER", "SYS"].includes(r)) {
+    if (["SUPER_ADMIN", "APP_OWNER", "SYS", "SUPER_A"].includes(r)) {
         navigate("/portal/admin/executive", { replace: true });
     } else if (r.includes("FINANCE")) {
         navigate("/portal/finance", { replace: true });
