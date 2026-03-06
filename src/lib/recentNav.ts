@@ -1,5 +1,5 @@
 export const RECENT_NAV_KEY = "be_recent_nav";
-export type RecentNavItem = { path: string; timestamp: number; };
+export type RecentNavItem = { path: string; label_en?: string; label_mm?: string; timestamp: number; };
 
 export function getRecentNav(): RecentNavItem[] {
   if (typeof window === "undefined") return [];
@@ -16,6 +16,14 @@ export function pushRecent(path: string) {
   const current = getRecentNav();
   const filtered = current.filter((x) => x.path !== path);
   filtered.unshift({ path, timestamp: Date.now() });
+  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
+}
+
+export function addRecentNav(item: Omit<RecentNavItem, "timestamp">) {
+  if (typeof window === "undefined") return;
+  const current = getRecentNav();
+  const filtered = current.filter((x) => x.path !== item.path);
+  filtered.unshift({ ...item, timestamp: Date.now() });
   window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
 }
 

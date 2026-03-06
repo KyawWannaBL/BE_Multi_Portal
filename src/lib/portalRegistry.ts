@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
+import { allowedByRole, normalizeRole } from "./permissionResolver";
 export { normalizeRole } from "./permissionResolver";
 
 export function defaultPortalForRole(role?: string | null): string {
@@ -117,3 +118,20 @@ export function flatByPath(sections: NavSection[]): Record<string, FlatNavItem> 
   for (const it of flattenNav(sections)) out[it.path] = it;
   return out;
 }
+
+// --- Fully Implemented Legacy Functions ---
+export const PORTALS = NAV_SECTIONS.flatMap(sec => sec.items.map(item => ({
+  ...item,
+  name: item.label_en,
+  href: item.path,
+  description: item.label_mm,
+})));
+
+export const getAvailablePortals = (authOrRole?: any): any[] => {
+  const role = typeof authOrRole === 'string' ? authOrRole : authOrRole?.role;
+  return PORTALS.filter(p => allowedByRole({ role }, p.allowRoles));
+};
+
+export const portalCountAll = PORTALS.length;
+export const portalCountForRole = (role?: any) => getAvailablePortals(role).length;
+export const portalsForRole = getAvailablePortals;
