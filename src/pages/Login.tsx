@@ -277,7 +277,9 @@ export default function Login() {
       const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(prof.role);
       setTargetPath(dst);
 
-      if (prof.mustChange) {
+      // Force Password Change check
+      const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
+      if (prof.mustChange || isDefault) {
         setView("force_change");
         setLoading(false);
         return;
