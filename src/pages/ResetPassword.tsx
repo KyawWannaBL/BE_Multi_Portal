@@ -137,9 +137,6 @@ export default function ResetPassword() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#05080F] text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
-      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none">
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
 
       <div className="absolute top-6 right-6 z-20">
         <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full">
@@ -151,8 +148,8 @@ export default function ResetPassword() {
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2">
-            <div className="mx-auto h-16 w-16 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
-              <img src="/logo.png" alt="Britium" className="h-10 w-10 object-contain" />
+            <div className="mx-auto h-24 w-24 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
+              <img src="/logo.png" alt="Britium" className="h-16 w-16 object-contain" />
             </div>
             <h1 className="text-3xl font-black tracking-tight">{brand.title}</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>

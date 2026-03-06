@@ -420,9 +420,6 @@ export default function Login() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#05080F] text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
-      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-25 pointer-events-none">
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
 
       <div className="absolute top-6 right-6 z-20">
         <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full">
@@ -434,8 +431,8 @@ export default function Login() {
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2">
-            <div className="mx-auto h-20 w-20 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
-              <img src="/logo.png" alt="Britium" className="h-12 w-12 object-contain" />
+            <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
+              <img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" />
             </div>
             <h1 className="text-4xl font-black tracking-tight text-white">{brand.title}</h1>
             <p className="text-sm text-slate-300">{t(brand.subtitleEn, brand.subtitleMy)}</p>
@@ -543,9 +540,9 @@ export default function Login() {
                           clearMessages();
                           setView("forgot");
                         }}
-                        className="text-[11px] text-slate-400 hover:text-emerald-300 font-bold uppercase"
+                        className="text-[11px] text-slate-400 hover:text-emerald-300 font-bold uppercase tracking-widest"
                       >
-                        {t("Forgot password?", "စကားဝှက် မေ့နေပါသလား?")}
+                        {t("Forgot Password?", "စကားဝှက် မေ့နေပါသလား?")}
                       </button>
 
                       <button
@@ -554,14 +551,14 @@ export default function Login() {
                           clearMessages();
                           setView("request");
                         }}
-                        className="text-[11px] text-slate-400 hover:text-emerald-300 font-bold uppercase flex items-center gap-2"
+                        className="text-[11px] text-[#D4AF37] hover:text-[#b5952f] font-bold uppercase tracking-widest flex items-center gap-2"
                       >
                         <UserPlus className="h-4 w-4" />
-                        {t("Request Access", "ဝင်ရောက်ခွင့် တောင်းမည်")}
+                        {t("Sign Up", "အကောင့်လုပ်မည်")}
                       </button>
                     </div>
 
-                    <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl">
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-2">
                       {loading ? (
                         <span className="flex items-center justify-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin" />
