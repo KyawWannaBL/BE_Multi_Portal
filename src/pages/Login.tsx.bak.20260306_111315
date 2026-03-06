@@ -8,8 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-// CRITICAL FIX: Ensure UserPlus is imported so the app doesn't crash on "request" view.
-import { AlertCircle, ArrowLeft, ArrowRight, Download, Mail, Lock, Loader2, Globe, Fingerprint, ShieldCheck, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Download, Mail, Lock, Loader2, Globe, Fingerprint, ShieldCheck } from "lucide-react";
 
 type View = "password" | "forgot" | "request" | "force_change" | "biometric_setup";
 
@@ -48,28 +47,19 @@ export default function Login() {
     };
     run();
 
-    // CRITICAL FIX: Safely parse headers to avoid TypeError crashes on missing headers.
     fetch('/android.apk', { method: 'HEAD' }).then(res => {
-      if (!res.ok) return;
-      const len = res.headers.get('content-length');
-      const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
-      const lastMod = res.headers.get('last-modified');
-      const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
-      setApkMeta({ size, updated });
+      const size = (parseInt(res.headers.get('content-length') || '0') / 1024 / 1024).toFixed(1);
+      setApkMeta({ size: `${size} MB`, updated: res.headers.get('last-modified')?.split(' ').slice(1,4).join(' ') || 'Recent' });
     }).catch(() => {});
   }, []);
 
   const handleRouting = async (userId: string) => {
-    try {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-      const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
-      if (["SUPER_ADMIN", "APP_OWNER", "SYS"].includes(role)) navigate("/portal/admin/executive");
-      else if (role.includes("FINANCE")) navigate("/portal/finance");
-      else if (["RIDER", "DRIVER", "HELPER"].includes(role)) navigate("/portal/execution");
-      else navigate("/portal/operations");
-    } catch (err) {
-      navigate("/portal/operations");
-    }
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
+    if (["SUPER_ADMIN", "APP_OWNER", "SYS"].includes(role)) navigate("/portal/admin/executive");
+    else if (role.includes("FINANCE")) navigate("/portal/finance");
+    else if (["RIDER", "DRIVER", "HELPER"].includes(role)) navigate("/portal/execution");
+    else navigate("/portal/operations");
   };
 
   const handleLogin = async (e: React.FormEvent) => {
