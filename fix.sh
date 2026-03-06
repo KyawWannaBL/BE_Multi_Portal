@@ -53,6 +53,12 @@ backup "$SUPER_ADMIN"
 # Restore original pages from git if they were modified/deleted
 git checkout HEAD -- src/pages/ 2>/dev/null || true
 
+# -----------------------------------------------------------------------------
+# INSTALL MISSING DEPENDENCIES (Fixes Vercel "sonner" and "date-fns" crash)
+# -----------------------------------------------------------------------------
+echo "📦 Installing required UI dependencies to prevent build crashes..."
+npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers
+
 # Generate safe placeholders for all secondary routes requested in App.tsx
 STUB_FILES=(
   "src/pages/AccountControl.tsx"
@@ -372,8 +378,8 @@ export function getTier(role?: string, tierLevel?: any): Tier {
   if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
 
   const r = normalizeRole(role);
-  if (["SYS", "APP_OWNER"].includes(r)) return "L5";
-  if (["SUPER_ADMIN", "ADMIN", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
+  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "L5";
+  if (["ADMIN", "ADM", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
   if (r.includes("FINANCE") || r.includes("HR") || r.includes("MARKETING") || r.includes("SUPPORT") || r.includes("CUSTOMER_SERVICE")) return "L3";
   if (r === "SUPERVISOR" || r === "STAFF" || r === "WAREHOUSE_MANAGER" || r === "SUBSTATION_MANAGER" || r === "DATA_ENTRY") return "L2";
   
@@ -392,7 +398,7 @@ export default function TierBadge({ role, tierLevel, className }: { role?: strin
   };
 
   return (
-    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
+    <span className={`inline-flex items-center h-8 px-3 rounded-full border text-[11px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
       {tier}
     </span>
   );
@@ -2154,11 +2160,8 @@ if [ -f "$SIGNUP" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# 9) Dependency Installation & Deploy Fix
+# 9) Push & Deploy Fix
 # -----------------------------------------------------------------------------
-echo "📦 Installing required dependencies..."
-npm install date-fns lucide-react react-router-dom sonner clsx tailwind-merge @radix-ui/react-slot
-
 echo "✅ Enterprise portal registry, sidebars, and safe stubs configured."
 git add .
 git commit -m "fix: enforce safe routing architecture, unify supabaseClient paths, and add robust wizard login"
