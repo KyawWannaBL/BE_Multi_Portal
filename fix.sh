@@ -2100,7 +2100,7 @@ export default function ResetPassword() {
             <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
               <img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" />
             </div>
-            <h1 className="text-3xl font-black tracking-tight">BRITIUM</h1>
+            <h1 className="text-3xl font-black tracking-tight">BRITIUM L5</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>
 
             <Button variant="ghost" className="text-slate-300 hover:bg-white/5 mt-2" onClick={() => nav("/login")}>
@@ -2172,5 +2172,15 @@ git commit -m "fix: resolve build crashes and unify routing registry" || echo "N
 # Push to both master and main to ensure deployment triggers regardless of branch name
 git push origin master || git push origin main || echo "Push failed, but continuing..."
 
-# Force Vercel deployment
-npx vercel --prod --force
+# Force Vercel deployment with retry mechanism for network issues
+echo "🚀 Triggering Vercel deployment..."
+for i in {1..3}; do
+  if npx vercel --prod --force; then
+    echo "✅ Vercel deployment successful!"
+    exit 0
+  fi
+  echo "⚠️ Vercel API unreachable (Attempt $i/3). Retrying in 5 seconds..."
+  sleep 5
+done
+
+echo "❌ Deployment failed due to network/DNS issues. Please check your internet connection and run 'npx vercel --prod --force' manually."
