@@ -398,7 +398,7 @@ export default function TierBadge({ role, tierLevel, className }: { role?: strin
   };
 
   return (
-    <span className={`inline-flex items-center h-8 px-3 rounded-full border text-[11px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
+    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
       {tier}
     </span>
   );
@@ -1781,216 +1781,217 @@ export default function Login() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-            <div className="h-1.5 w-full bg-gradient-to-r from-emerald-600 to-teal-400" />
-            <CardContent className="p-7 md:p-8 space-y-5">
-              {errorMsg && (
-                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-300">
-                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold leading-relaxed">{errorMsg}</p>
-                </div>
-              )}
-              {successMsg && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-300">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold leading-relaxed">{successMsg}</p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
-                  <div className="font-extrabold uppercase tracking-widest text-sm">{pageTitle}</div>
-                </div>
-              </div>
-
-              {(view === "login" || view === "magic" || view === "otp_verify") && (
-                <div className="flex gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
-                  <Button type="button" variant={view === "login" ? "default" : "ghost"} className={view === "login" ? "bg-emerald-600 hover:bg-emerald-500 text-white flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("login"); }}>
-                    {t("Password", "စကားဝှက်")}
-                  </Button>
-                  <Button type="button" variant={view !== "login" ? "default" : "ghost"} className={view !== "login" ? "bg-[#D4AF37] hover:bg-[#b5952f] text-black flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("magic"); }}>
-                    {t("Email Link", "အီးမေးလ်")}
-                  </Button>
-                </div>
-              )}
-
-              {view === "login" && (
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Corporate Email", "အီးမေးလ်")} />
+          <>
+            <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-600 to-teal-400" />
+              <CardContent className="p-7 md:p-8 space-y-5">
+                {errorMsg && (
+                  <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-300">
+                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold leading-relaxed">{errorMsg}</p>
                   </div>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Password", "စကားဝှက်")} />
+                )}
+                {successMsg && (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-300">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold leading-relaxed">{successMsg}</p>
                   </div>
+                )}
 
-                  <div className="flex items-center justify-between px-1">
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold cursor-pointer">
-                      <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-emerald-500" />
-                      {t("Remember me", "မှတ်ထားမည်")}
-                    </label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                    <div className="font-extrabold uppercase tracking-widest text-sm">{pageTitle}</div>
+                  </div>
+                </div>
 
-                    <div className="flex items-center gap-4 text-[11px] font-black">
-                      <button type="button" onClick={() => { clearMessages(); setView("forgot"); }} className="text-slate-400 hover:text-emerald-300 uppercase tracking-widest">
-                        {t("Forgot?", "စကားဝှက်မေ့သွားလား")}
-                      </button>
-                      <button type="button" onClick={() => { clearMessages(); setView("request"); }} className="text-[#D4AF37] hover:text-[#b5952f] uppercase tracking-widest flex items-center gap-1">
-                        <UserPlus className="h-3 w-3" /> {t("Sign Up", "အကောင့်လုပ်မည်")}
-                      </button>
+                {(view === "login" || view === "magic" || view === "otp_verify") && (
+                  <div className="flex gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                    <Button type="button" variant={view === "login" ? "default" : "ghost"} className={view === "login" ? "bg-emerald-600 hover:bg-emerald-500 text-white flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("login"); }}>
+                      {t("Password", "စကားဝှက်")}
+                    </Button>
+                    <Button type="button" variant={view !== "login" ? "default" : "ghost"} className={view !== "login" ? "bg-[#D4AF37] hover:bg-[#b5952f] text-black flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("magic"); }}>
+                      {t("Email Link", "အီးမေးလ်")}
+                    </Button>
+                  </div>
+                )}
+
+                {view === "login" && (
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Corporate Email", "အီးမေးလ်")} />
                     </div>
-                  </div>
-
-                  <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-2">
-                    {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Authenticating…", "စစ်ဆေးနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Login", "အကောင့်ဝင်မည်")} <ArrowRight className="h-4 w-4" /></span>}
-                  </Button>
-                </form>
-              )}
-
-              {view === "magic" && (
-                <form onSubmit={handleMagicSend} className="space-y-5">
-                  <div className="text-[11px] text-slate-400 px-2 leading-relaxed italic">
-                    {t("System will dispatch a one-time secure link to your work inbox.", "စနစ်မှ တစ်ခါသုံး လုံခြုံရေး link ကို သင့်အီးမေးလ်သို့ ပို့ပေးပါမည်။")}
-                  </div>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white" placeholder={t("Corporate Email", "အီးမေးလ်")} />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full h-14 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-2xl shadow-xl transition-all">
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Send Link", "Link ပို့မည်")}
-                  </Button>
-                </form>
-              )}
-
-              {view === "otp_verify" && (
-                <form onSubmit={handleOtpVerify} className="space-y-5">
-                  <div className="text-xs text-emerald-400 font-bold px-2">{otpHint}</div>
-                  <div className="relative">
-                    <ShieldCheck className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
-                    <Input required value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white font-mono tracking-[0.5em] text-center" placeholder="000000" maxLength={6} />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-2xl">
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Verify & Login", "အတည်ပြုပြီး ဝင်မည်")}
-                  </Button>
-                </form>
-              )}
-
-              {view === "forgot" && (
-                <form onSubmit={handleForgot} className="space-y-4">
-                  <div className="text-sm text-slate-300">{t("Enter your email to receive a secure recovery link.", "Recovery link ရယူရန် အီးမေးလ်ထည့်ပါ။")}</div>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Corporate Email", "အီးမေးလ်")} />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full h-12 bg-slate-700 hover:bg-slate-600 text-white font-black tracking-widest uppercase rounded-xl">
-                    {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Sending…", "ပို့နေသည်…")}</span> : t("Send Recovery Link", "Recovery Link ပို့မည်")}
-                  </Button>
-                </form>
-              )}
-
-              {view === "request" && (
-                <form onSubmit={handleRequestAccess} className="space-y-4">
-                  <div className="text-sm text-slate-300">{t("This platform is for authorized personnel. Submit a request to create an account.", "ဤစနစ်သည် ခွင့်ပြုထားသူများအတွက် ဖြစ်သည်။ အကောင့်ဖန်တီးရန် request တင်ပါ။")}</div>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Work Email", "အလုပ်အီးမေးလ်")} />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full h-12 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-xl">
-                    {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Submitting…", "တင်နေသည်…")}</span> : t("Submit Request", "Request တင်မည်")}
-                  </Button>
-                </form>
-              )}
-
-              {view === "force_change" && (
-                <form onSubmit={handleForceChange} className="space-y-4">
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">
-                    {t("A password update is required before access is granted.", "ဝင်ရောက်ခွင့်မပြုမီ စကားဝှက်အသစ်ပြောင်းရန် လိုအပ်ပါသည်။")}
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} />
-                  </div>
-                  <div className="relative">
-                    <CheckCircle2 className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("Confirm Password", "စကားဝှက် အတည်ပြုပါ")} />
-                  </div>
-                  <Button type="submit" disabled={loading} className="w-full h-12 bg-amber-600 hover:bg-amber-500 text-white font-black tracking-widest uppercase rounded-xl">
-                    {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Update & Continue", "ပြောင်းပြီး ဆက်သွားမည်")} <ArrowRight className="h-4 w-4" /></span>}
-                  </Button>
-                </form>
-              )}
-
-              {view === "mfa" && (
-                <div className="space-y-4">
-                  <div className="text-sm text-slate-300">{t("Admin accounts require MFA. Use an authenticator app.", "Admin အကောင့်များသည် MFA လိုအပ်ပါသည်။ Authenticator app အသုံးပြုပါ။")}</div>
-                  {mfaStage === "enroll" && (
-                    <div className="space-y-3">
-                      {mfaQrSvg && (
-                        <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-                          <div className="text-xs text-slate-300 mb-2">{t("Scan this QR code:", "ဒီ QR ကို စကန်ပါ:")}</div>
-                          <div className="bg-white rounded-lg p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: mfaQrSvg }} />
-                        </div>
-                      )}
-                      {mfaSecret && (
-                        <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-slate-300">
-                          <div className="font-bold">{t("Manual key:", "Manual key:")}</div>
-                          <div className="font-mono break-all">{mfaSecret}</div>
-                          <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button type="button" size="sm" variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(mfaSecret)}><Copy className="h-3 w-3 mr-2" /> {t("Copy", "ကူးယူ")}</Button>
-                          </div>
-                        </div>
-                      )}
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Password", "စကားဝှက်")} />
                     </div>
-                  )}
-                  <form onSubmit={verifyMfa} className="space-y-3">
-                    <Input inputMode="numeric" pattern="\d*" value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono tracking-[0.5em] text-center" placeholder="000000" />
-                    <div className="flex gap-2 flex-wrap">
-                      <Button type="submit" disabled={loading || !mfaFactorId || !mfaChallengeId} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl">
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Verify", "အတည်ပြု")}
-                      </Button>
-                      <Button type="button" variant="outline" disabled={loading} className="border-white/10 bg-black/40 hover:bg-white/5 text-slate-200 rounded-xl" onClick={() => prepareMfa()}>
-                        <RefreshCw className="h-4 w-4 mr-2" /> {t("Restart MFA", "MFA ပြန်စ")}
-                      </Button>
-                      <Button type="button" variant="ghost" className="text-slate-300 hover:bg-white/5 rounded-xl" onClick={async () => { await supabase.auth.signOut(); setView("login"); }}>
-                        {t("Logout", "ထွက်မည်")}
-                      </Button>
+
+                    <div className="flex items-center justify-between px-1">
+                      <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold cursor-pointer">
+                        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-emerald-500" />
+                        {t("Remember me", "မှတ်ထားမည်")}
+                      </label>
+
+                      <div className="flex items-center gap-4 text-[11px] font-black">
+                        <button type="button" onClick={() => { clearMessages(); setView("forgot"); }} className="text-slate-400 hover:text-emerald-300 uppercase tracking-widest">
+                          {t("Forgot?", "စကားဝှက်မေ့သွားလား")}
+                        </button>
+                        <button type="button" onClick={() => { clearMessages(); setView("request"); }} className="text-[#D4AF37] hover:text-[#b5952f] uppercase tracking-widest flex items-center gap-1">
+                          <UserPlus className="h-3 w-3" /> {t("Sign Up", "အကောင့်လုပ်မည်")}
+                        </button>
+                      </div>
                     </div>
+
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-2">
+                      {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Authenticating…", "စစ်ဆေးနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Login", "အကောင့်ဝင်မည်")} <ArrowRight className="h-4 w-4" /></span>}
+                    </Button>
                   </form>
-                </div>
-              )}
+                )}
 
-              {/* Wizard Nav */}
-              {showWizardNav && (
-                <div className="flex items-center justify-between pt-2">
-                  <Button type="button" variant="ghost" disabled={!canPrev} onClick={goPrev} className="h-11 px-4 rounded-xl text-slate-300 hover:text-white disabled:opacity-40">
-                    <ArrowLeft className="h-4 w-4 mr-2" /> {t("Previous", "နောက်ပြန်")}
-                  </Button>
-                  <Button type="button" disabled={!canNext} onClick={goNext} className="h-11 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest disabled:opacity-40">
-                    {t("Next", "ရှေ့သို့")} <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              )}
+                {view === "magic" && (
+                  <form onSubmit={handleMagicSend} className="space-y-5">
+                    <div className="text-[11px] text-slate-400 px-2 leading-relaxed italic">
+                      {t("System will dispatch a one-time secure link to your work inbox.", "စနစ်မှ တစ်ခါသုံး လုံခြုံရေး link ကို သင့်အီးမေးလ်သို့ ပို့ပေးပါမည်။")}
+                    </div>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
+                      <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white" placeholder={t("Corporate Email", "အီးမေးလ်")} />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-2xl shadow-xl transition-all">
+                      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Send Link", "Link ပို့မည်")}
+                    </Button>
+                  </form>
+                )}
 
-              <Separator className="bg-white/10" />
+                {view === "otp_verify" && (
+                  <form onSubmit={handleOtpVerify} className="space-y-5">
+                    <div className="text-xs text-emerald-400 font-bold px-2">{otpHint}</div>
+                    <div className="relative">
+                      <ShieldCheck className="absolute left-4 top-4 h-5 w-5 text-slate-500" />
+                      <Input required value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white font-mono tracking-[0.5em] text-center" placeholder="000000" maxLength={6} />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-2xl">
+                      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Verify & Login", "အတည်ပြုပြီး ဝင်မည်")}
+                    </Button>
+                  </form>
+                )}
 
-              <a href="/android.apk" download="android.apk" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest text-[11px] transition-colors">
-                <Download className="h-4 w-4 text-emerald-400" />
-                {t("Download Android App (APK)", "Android App (APK) ဒေါင်းလုပ်")}
-              </a>
+                {view === "forgot" && (
+                  <form onSubmit={handleForgot} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Enter your email to receive a secure recovery link.", "Recovery link ရယူရန် အီးမေးလ်ထည့်ပါ။")}</div>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Corporate Email", "အီးမေးလ်")} />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-slate-700 hover:bg-slate-600 text-white font-black tracking-widest uppercase rounded-xl">
+                      {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Sending…", "ပို့နေသည်…")}</span> : t("Send Recovery Link", "Recovery Link ပို့မည်")}
+                    </Button>
+                  </form>
+                )}
 
-            </CardContent>
-          </Card>
-          
-          <div className="text-center text-[10px] text-slate-500 font-bold opacity-60 mt-4">
-            © {new Date().getFullYear()} Britium Enterprise • {t("All rights reserved.", "မူပိုင်ခွင့် ရယူထားသည်။")}
-          </div>
+                {view === "request" && (
+                  <form onSubmit={handleRequestAccess} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("This platform is for authorized personnel. Submit a request to create an account.", "ဤစနစ်သည် ခွင့်ပြုထားသူများအတွက် ဖြစ်သည်။ အကောင့်ဖန်တီးရန် request တင်ပါ။")}</div>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Work Email", "အလုပ်အီးမေးလ်")} />
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-xl">
+                      {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Submitting…", "တင်နေသည်…")}</span> : t("Submit Request", "Request တင်မည်")}
+                    </Button>
+                  </form>
+                )}
 
-        </div>
+                {view === "force_change" && (
+                  <form onSubmit={handleForceChange} className="space-y-4">
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">
+                      {t("A password update is required before access is granted.", "ဝင်ရောက်ခွင့်မပြုမီ စကားဝှက်အသစ်ပြောင်းရန် လိုအပ်ပါသည်။")}
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} />
+                    </div>
+                    <div className="relative">
+                      <CheckCircle2 className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                      <Input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("Confirm Password", "စကားဝှက် အတည်ပြုပါ")} />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-amber-600 hover:bg-amber-500 text-white font-black tracking-widest uppercase rounded-xl">
+                      {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Update & Continue", "ပြောင်းပြီး ဆက်သွားမည်")} <ArrowRight className="h-4 w-4" /></span>}
+                    </Button>
+                  </form>
+                )}
+
+                {view === "mfa" && (
+                  <div className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Admin accounts require MFA. Use an authenticator app.", "Admin အကောင့်များသည် MFA လိုအပ်ပါသည်။ Authenticator app အသုံးပြုပါ။")}</div>
+                    {mfaStage === "enroll" && (
+                      <div className="space-y-3">
+                        {mfaQrSvg && (
+                          <div className="rounded-xl border border-white/10 bg-black/40 p-3">
+                            <div className="text-xs text-slate-300 mb-2">{t("Scan this QR code:", "ဒီ QR ကို စကန်ပါ:")}</div>
+                            <div className="bg-white rounded-lg p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: mfaQrSvg }} />
+                          </div>
+                        )}
+                        {mfaSecret && (
+                          <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-slate-300">
+                            <div className="font-bold">{t("Manual key:", "Manual key:")}</div>
+                            <div className="font-mono break-all">{mfaSecret}</div>
+                            <div className="mt-2 flex gap-2 flex-wrap">
+                              <Button type="button" size="sm" variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(mfaSecret)}><Copy className="h-3 w-3 mr-2" /> {t("Copy", "ကူးယူ")}</Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <form onSubmit={verifyMfa} className="space-y-3">
+                      <Input inputMode="numeric" pattern="\d*" value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono tracking-[0.5em] text-center" placeholder="000000" />
+                      <div className="flex gap-2 flex-wrap">
+                        <Button type="submit" disabled={loading || !mfaFactorId || !mfaChallengeId} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl">
+                          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Verify", "အတည်ပြု")}
+                        </Button>
+                        <Button type="button" variant="outline" disabled={loading} className="border-white/10 bg-black/40 hover:bg-white/5 text-slate-200 rounded-xl" onClick={() => prepareMfa()}>
+                          <RefreshCw className="h-4 w-4 mr-2" /> {t("Restart MFA", "MFA ပြန်စ")}
+                        </Button>
+                        <Button type="button" variant="ghost" className="text-slate-300 hover:bg-white/5 rounded-xl" onClick={async () => { await supabase.auth.signOut(); setView("login"); }}>
+                          {t("Logout", "ထွက်မည်")}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Wizard Nav */}
+                {showWizardNav && (
+                  <div className="flex items-center justify-between pt-2">
+                    <Button type="button" variant="ghost" disabled={!canPrev} onClick={goPrev} className="h-11 px-4 rounded-xl text-slate-300 hover:text-white disabled:opacity-40">
+                      <ArrowLeft className="h-4 w-4 mr-2" /> {t("Previous", "နောက်ပြန်")}
+                    </Button>
+                    <Button type="button" disabled={!canNext} onClick={goNext} className="h-11 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest disabled:opacity-40">
+                      {t("Next", "ရှေ့သို့")} <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </div>
+                )}
+
+                <Separator className="bg-white/10" />
+
+                <a href="/android.apk" download="android.apk" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest text-[11px] transition-colors">
+                  <Download className="h-4 w-4 text-emerald-400" />
+                  {t("Download Android App (APK)", "Android App (APK) ဒေါင်းလုပ်")}
+                </a>
+
+              </CardContent>
+            </Card>
+            
+            <div className="text-center text-[10px] text-slate-500 font-bold opacity-60 mt-4">
+              © {new Date().getFullYear()} Britium Enterprise • {t("All rights reserved.", "မူပိုင်ခွင့် ရယူထားသည်။")}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2099,7 +2100,7 @@ export default function ResetPassword() {
             <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
               <img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" />
             </div>
-            <h1 className="text-3xl font-black tracking-tight">BRITIUM L5</h1>
+            <h1 className="text-3xl font-black tracking-tight">BRITIUM</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>
 
             <Button variant="ghost" className="text-slate-300 hover:bg-white/5 mt-2" onClick={() => nav("/login")}>
@@ -2163,7 +2164,13 @@ fi
 # 9) Push & Deploy Fix
 # -----------------------------------------------------------------------------
 echo "✅ Enterprise portal registry, sidebars, and safe stubs configured."
+
+# Attempt to commit. If there are no changes, this might throw an error, so we catch it.
 git add .
-git commit -m "fix: enforce safe routing architecture, unify supabaseClient paths, and add robust wizard login"
-git push origin master
+git commit -m "fix: resolve build crashes and unify routing registry" || echo "No changes to commit."
+
+# Push to both master and main to ensure deployment triggers regardless of branch name
+git push origin master || git push origin main || echo "Push failed, but continuing..."
+
+# Force Vercel deployment
 npx vercel --prod --force

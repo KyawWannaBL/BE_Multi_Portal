@@ -99,7 +99,7 @@ export default function ResetPassword() {
             <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
               <img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" />
             </div>
-            <h1 className="text-3xl font-black tracking-tight">BRITIUM L5</h1>
+            <h1 className="text-3xl font-black tracking-tight">BRITIUM</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>
 
             <Button variant="ghost" className="text-slate-300 hover:bg-white/5 mt-2" onClick={() => nav("/login")}>
