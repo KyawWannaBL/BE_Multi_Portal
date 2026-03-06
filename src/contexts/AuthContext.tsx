@@ -18,12 +18,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
+    let authSubscription: any = null;
 
-    // FIX: Rely solely on onAuthStateChange (which fires INITIAL_SESSION automatically)
-    // This stops the dual-fire lock error seen in your console.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (mounted) setLoading(true);
+    const initSession = async () => {
       try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
         if (session?.user) {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
           if (mounted) setUser({ 
@@ -35,15 +36,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (mounted) setUser(null);
         }
       } catch (err) {
-        console.error("Auth state error:", err);
+        console.error("Auth initialization error:", err);
       } finally {
         if (mounted) setLoading(false);
       }
-    });
+
+      // Only attach listener AFTER initial fetch to prevent lock contention races
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'INITIAL_SESSION') return; // Handled above
+        
+        if (mounted) setLoading(true);
+        try {
+          if (session?.user) {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+            if (mounted) setUser({ 
+              ...session.user, 
+              profile: profile || {}, 
+              role: profile?.role || profile?.role_code || 'GUEST' 
+            });
+          } else {
+            if (mounted) setUser(null);
+          }
+        } catch (err) {
+          console.error("Auth state change error:", err);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      });
+      authSubscription = data.subscription;
+    };
+
+    initSession();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      if (authSubscription) authSubscription.unsubscribe();
     };
   }, []);
 

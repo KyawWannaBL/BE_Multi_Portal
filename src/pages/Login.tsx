@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +15,7 @@ type View = "password" | "forgot" | "request" | "force_change" | "biometric_setu
 export default function Login() {
   const navigate = useNavigate();
   const { lang, toggleLang } = useLanguage();
-  const { login, user, loading: authLoading } = useAuth(); // Read state from fixed context
+  const { login, user, loading: authLoading } = useAuth();
   
   const [isBooting, setIsBooting] = useState(true);
   const [view, setView] = useState<View>("password");
@@ -26,6 +26,7 @@ export default function Login() {
   const [remember, setRemember] = useState(getRememberMe());
   const [errorMsg, setErrorMsg] = useState("");
   const [apkMeta, setApkMeta] = useState({ size: '...', updated: '...' });
+  const hasCheckedInitial = useRef(false);
 
   const t = (en: string, my: string) => lang === "en" ? en : my;
 
@@ -35,35 +36,44 @@ export default function Login() {
   const canPrev = wIndex > 0;
   const canNext = wIndex >= 0 && wIndex < wizardViews.length - 1;
 
-  // Safe auto-redirect that checks context directly instead of hammering the DB lock
-  useEffect(() => {
-    if (!authLoading && user) {
-       navigate("/", { replace: true });
-    }
-  }, [user, authLoading, navigate]);
-
-  // Safe Boot Screen & APK Fetcher
+  // PASSIVE AUTH LISTENER - Eliminates the API Race Condition
   useEffect(() => {
     let mounted = true;
-    
-    // HARD FALLBACK: Ensure the boot screen disappears no matter what happens
+
+    // Hard fallback guarantees the boot screen dismisses
     const hardTimeout = setTimeout(() => {
       if (mounted) setIsBooting(false);
-    }, 1500);
+    }, 2500);
 
+    if (!authLoading) {
+      if (!hasCheckedInitial.current) {
+        hasCheckedInitial.current = true;
+        if (user) {
+          navigate("/", { replace: true });
+        } else {
+          setTimeout(() => { if (mounted) setIsBooting(false); }, 500);
+        }
+      }
+    }
+
+    return () => { 
+      mounted = false; 
+      clearTimeout(hardTimeout);
+    };
+  }, [authLoading, user, navigate]);
+
+  // APK Fetcher
+  useEffect(() => {
+    let mounted = true;
     fetch('/android.apk', { method: 'HEAD' }).then(res => {
       if (!res.ok || !mounted) return;
       const len = res.headers.get('content-length');
       const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
       const lastMod = res.headers.get('last-modified');
       const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
-      setApkMeta({ size, updated });
+      if (mounted) setApkMeta({ size, updated });
     }).catch(() => {});
-
-    return () => { 
-      mounted = false; 
-      clearTimeout(hardTimeout);
-    };
+    return () => { mounted = false; };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -79,7 +89,6 @@ export default function Login() {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
       const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
       
-      // Enforce the specific password policy
       const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
       const mustChange = profile?.must_change_password === true || isDefault;
 
