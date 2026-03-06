@@ -7,7 +7,7 @@ export function RequireRole({ allow, children }: { allow: string[]; children: Re
   if (loading) return null;
   const userRole = (role || '').toUpperCase();
   if (!allow.includes(userRole)) {
-     return <Navigate to="/portal/operations" replace />; // Safe fallback
+     return <Navigate to="/portal/operations" replace />;
   }
   return <>{children}</>;
 }

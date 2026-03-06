@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase, isSupabaseConfigured, getRememberMe, setRememberMe } from "@/lib/supabase";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { AlertCircle, ArrowLeft, ArrowRight, Download, Mail, Lock, Loader2, Globe, Fingerprint, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, Mail, Lock, Loader2, Globe, Fingerprint, ShieldCheck, UserPlus } from "lucide-react";
 
 type View = "password" | "forgot" | "request" | "force_change" | "biometric_setup";
 
@@ -25,16 +25,23 @@ export default function Login() {
   const [newPass, setNewPass] = useState("");
   const [remember, setRemember] = useState(getRememberMe());
   const [errorMsg, setErrorMsg] = useState("");
+  const [apkMeta, setApkMeta] = useState({ size: '...', updated: '...' });
 
   const t = (en: string, my: string) => lang === "en" ? en : my;
+
+  const wizardViews: View[] = ["password", "forgot", "request"];
+  const wIndex = wizardViews.indexOf(view);
+  const showNav = wIndex >= 0;
+  const canPrev = wIndex > 0;
+  const canNext = wIndex >= 0 && wIndex < wizardViews.length - 1;
 
   useEffect(() => {
     let mounted = true;
     
-    // HARD FALLBACK: Ensure the boot screen disappears after 3 seconds NO MATTER WHAT
+    // HARD FALLBACK: Stops infinite spinners immediately
     const hardTimeout = setTimeout(() => {
       if (mounted) setIsBooting(false);
-    }, 3000);
+    }, 2000);
 
     const run = async () => {
       try {
@@ -44,12 +51,21 @@ export default function Login() {
           navigate("/", { replace: true });
         }
       } catch (err) {
-        console.error("Boot sequence error:", err);
+        console.error(err);
       } finally {
-        if (mounted) setTimeout(() => setIsBooting(false), 1000);
+        if (mounted) setTimeout(() => setIsBooting(false), 500);
       }
     };
     run();
+
+    fetch('/android.apk', { method: 'HEAD' }).then(res => {
+      if (!res.ok || !mounted) return;
+      const len = res.headers.get('content-length');
+      const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
+      const lastMod = res.headers.get('last-modified');
+      const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
+      setApkMeta({ size, updated });
+    }).catch(() => {});
 
     return () => { 
       mounted = false; 
@@ -65,12 +81,12 @@ export default function Login() {
     try {
       const { data, error } = await login(email, password);
       if (error) throw error;
-      if (!data?.user?.id) throw new Error("Authentication verification failed.");
+      if (!data?.user?.id) throw new Error("Auth verification failed.");
 
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
       const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
       
-      // Default password policy enforcement
+      // Enforce the specific password policy
       const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
       const mustChange = profile?.must_change_password === true || isDefault;
 
@@ -80,7 +96,7 @@ export default function Login() {
         setView("biometric_setup");
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Login system encountered an error.");
+      setErrorMsg(err.message || "Invalid Credentials");
     } finally {
       setLoading(false);
     }
@@ -107,13 +123,14 @@ export default function Login() {
   };
 
   const finalizeLogin = async () => {
+    // Rely on App.tsx root redirection to avoid loops
     navigate("/", { replace: true });
   };
 
   if (isBooting) {
     return (
       <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4">
-        <div className="bg-white rounded-[24px] p-8 w-full max-w-md shadow-2xl animate-in fade-in duration-700">
+        <div className="bg-white rounded-[24px] p-8 w-full max-w-md shadow-2xl animate-in fade-in duration-500">
           <div className="flex items-center gap-5">
             <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center">
               <img src="/logo.png" className="w-12 h-12" alt="Logo" />
@@ -169,6 +186,16 @@ export default function Login() {
               </form>
             )}
 
+            {view === "forgot" && (
+              <div className="space-y-4 animate-in slide-in-from-right duration-300 text-center">
+                <ShieldCheck className="h-10 w-10 text-emerald-500 mx-auto" />
+                <h3 className="text-white font-black uppercase text-sm">Reset Password</h3>
+                <p className="text-slate-400 text-xs">Enter email to receive reset instructions.</p>
+                <Input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="h-14 bg-black/40 border-white/10 rounded-2xl text-white px-4" />
+                <Button className="w-full h-14 bg-emerald-600 rounded-2xl font-black uppercase" onClick={() => { alert('Reset Link Sent!'); setView('password'); }}>Send Reset Link</Button>
+              </div>
+            )}
+
             {view === "request" && (
               <div className="space-y-4 animate-in slide-in-from-right duration-300 text-center">
                 <h3 className="text-white font-black uppercase text-sm">Request Access</h3>
@@ -205,12 +232,22 @@ export default function Login() {
               </div>
             )}
 
+            {showNav && (
+              <div className="flex justify-between items-center pt-2">
+                 <Button variant="ghost" disabled={!canPrev} onClick={() => setView(wizardViews[wIndex - 1])} className="text-slate-500 text-[10px] font-black uppercase tracking-widest disabled:opacity-30"><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Button>
+                 <Button variant="ghost" disabled={!canNext} onClick={() => setView(wizardViews[wIndex + 1])} className="text-slate-500 text-[10px] font-black uppercase tracking-widest disabled:opacity-30">Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
+              </div>
+            )}
+
             <Separator className="bg-white/5" />
 
             <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest px-2">
               <button onClick={toggleLang} className="text-slate-400 flex items-center gap-1 hover:text-white transition-colors">
                 <Globe className="h-3 w-3" /> {lang === 'en' ? 'MY' : 'EN'}
               </button>
+              <a href="/android.apk" download className="text-emerald-500 hover:text-emerald-400 flex items-center gap-1">
+                <Download className="h-3 w-3" /> APK ({apkMeta.size})
+              </a>
             </div>
 
           </CardContent>

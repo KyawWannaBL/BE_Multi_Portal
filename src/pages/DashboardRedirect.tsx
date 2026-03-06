@@ -27,7 +27,7 @@ export default function DashboardRedirect() {
 
   return (
     <div className="min-h-screen bg-[#05080F] flex items-center justify-center">
-      <div className="animate-pulse text-emerald-500 font-black uppercase tracking-widest text-xs">Routing to Secure Portal...</div>
+      <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" />
     </div>
   );
 }

@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (mounted) setUser(null);
         }
       } catch (err) {
-        console.error("Auth context error:", err);
+        console.error("Auth init error:", err);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -43,7 +43,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'INITIAL_SESSION') return;
-      setLoading(true);
       try {
         if (session?.user) {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
@@ -56,7 +55,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (mounted) setUser(null);
         }
       } catch (err) {
-        console.error("Auth state change error:", err);
+        console.error("Auth state error:", err);
       } finally {
         if (mounted) setLoading(false);
       }
