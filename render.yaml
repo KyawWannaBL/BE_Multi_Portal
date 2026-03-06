@@ -16,7 +16,7 @@ services:
       - key: PORT
         value: "8787"
       - key: APP_BASE_URL
-        value: "[https://www.britiumexpress.com](https://www.britiumexpress.com)"
+        value: "https://www.britiumexpress.com"
       - key: SUPER_ADMIN_EMAILS
         value: "md@britiumexpress.com,md@britiumventures.com"
 

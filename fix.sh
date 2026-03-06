@@ -210,7 +210,7 @@ EOF
 cat > "$SUPA" <<'EOF'
 // @ts-nocheck
 import { createClient } from "@supabase/supabase-js";
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || "[https://dltavabvjwocknkyvwgz.supabase.co](https://dltavabvjwocknkyvwgz.supabase.co)") as string;
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || "https://dltavabvjwocknkyvwgz.supabase.co") as string;
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo") as string;
 export const SUPABASE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -826,7 +826,7 @@ NOTIFY_SECRET=whk-d6lgfjf5r7bs7399nk30
 ACTION_SECRET=whsec_VrdckfV1cllVVdE6rNgwOfrRtuyj66mTzu7U/gyK1WcW5SSx5PXcP/lxkAvkSR+gEysL76sQ0thpMaii4kLqLA==
 
 # ---- Platform base URL (for action links in email) ----
-APP_BASE_URL=[https://www.britiumexpress.com](https://www.britiumexpress.com)
+APP_BASE_URL=https://www.britiumexpress.com
 
 # ---- Super Admin recipients ----
 SUPER_ADMIN_EMAILS=md@britiumexpress.com,md@britiumventures.com
@@ -858,16 +858,16 @@ cat > .env.production.sample <<'EOF'
 # ===================================
 
 # EN/MM: Notify receiver public URL (Render custom domain recommended)
-VITE_NOTIFY_WEBHOOK_URL=[https://notify.britiumexpress.com/notify](https://notify.britiumexpress.com/notify)
+VITE_NOTIFY_WEBHOOK_URL=https://notify.britiumexpress.com/notify
 
 # ✅ FIX: base URL MUST NOT include /notify
-VITE_NOTIFY_RECEIVER_BASE_URL=[https://notify.britiumexpress.com](https://notify.britiumexpress.com)
+VITE_NOTIFY_RECEIVER_BASE_URL=https://notify.britiumexpress.com
 
 # EN/MM: must match server NOTIFY_SECRET (your whk-...)
 VITE_NOTIFY_WEBHOOK_SECRET=whk-d6lgfjf5r7bs7399nk30
 
 # Web domain
-VITE_APP_BASE_URL=[https://www.britiumexpress.com](https://www.britiumexpress.com)
+VITE_APP_BASE_URL=https://www.britiumexpress.com
 EOF
 
 cat > render.yaml <<'EOF'
@@ -889,7 +889,7 @@ services:
       - key: PORT
         value: "8787"
       - key: APP_BASE_URL
-        value: "[https://www.britiumexpress.com](https://www.britiumexpress.com)"
+        value: "https://www.britiumexpress.com"
       - key: SUPER_ADMIN_EMAILS
         value: "md@britiumexpress.com,md@britiumventures.com"
 
@@ -926,7 +926,7 @@ cat > "$SERVER_DIR/README_RENDER.md" <<'EOF'
 
 ### 2) Render Env Vars (set in Dashboard)
 Required:
-- APP_BASE_URL=[https://www.britiumexpress.com](https://www.britiumexpress.com)
+- APP_BASE_URL=https://www.britiumexpress.com
 - SUPER_ADMIN_EMAILS=md@britiumexpress.com,md@britiumventures.com
 
 Secrets:
@@ -948,21 +948,21 @@ Use: `notify.britiumexpress.com`
 DNS: CNAME `notify` -> Render service hostname
 
 ### 4) Frontend Vite env
-- VITE_NOTIFY_WEBHOOK_URL=[https://notify.britiumexpress.com/notify](https://notify.britiumexpress.com/notify)
-- VITE_NOTIFY_RECEIVER_BASE_URL=[https://notify.britiumexpress.com](https://notify.britiumexpress.com)
+- VITE_NOTIFY_WEBHOOK_URL=https://notify.britiumexpress.com/notify
+- VITE_NOTIFY_RECEIVER_BASE_URL=https://notify.britiumexpress.com
 - VITE_NOTIFY_WEBHOOK_SECRET=whk-d6lgfjf5r7bs7399nk30(same as NOTIFY_SECRET)
-- VITE_APP_BASE_URL=[https://www.britiumexpress.com](https://www.britiumexpress.com)
+- VITE_APP_BASE_URL=https://www.britiumexpress.com
 
 ### 5) Quick test
 ```bash
-curl -X POST "https://notify.britiumexpress.com/notify" \
+curl -X POST "[https://notify.britiumexpress.com/notify](https://notify.britiumexpress.com/notify)" \
   -H "content-type: application/json" \
   -H "x-notify-secret:whk-d6lgfjf5r7bs7399nk30" \
   -d '{
     "event":"ACCOUNT_REQUEST_CREATED",
     "at":"2026-01-01T00:00:00.000Z",
     "actorEmail":"test@britiumexpress.com",
-    "appBaseUrl":"https://www.britiumexpress.com",
+    "appBaseUrl":"[https://www.britiumexpress.com](https://www.britiumexpress.com)",
     "payload":{"email":"newuser@britiumexpress.com","role":"ADMIN","note":"Render SMTP test"}
   }'
 ```
