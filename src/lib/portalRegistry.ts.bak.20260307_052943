@@ -1,23 +1,6 @@
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
-export { normalizeRole } from "./permissionResolver";
-
-export function defaultPortalForRole(role?: string | null): string {
-  const r = normalizeRole(role);
-  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "/portal/admin";
-  if (["FINANCE_USER", "FINANCE_STAFF"].includes(r)) return "/portal/finance";
-  if (["HR_ADMIN"].includes(r)) return "/portal/hr";
-  if (["MARKETING_ADMIN"].includes(r)) return "/portal/marketing";
-  if (["CUSTOMER_SERVICE"].includes(r)) return "/portal/support";
-  if (["WAREHOUSE_MANAGER"].includes(r)) return "/portal/warehouse";
-  if (["SUBSTATION_MANAGER"].includes(r)) return "/portal/branch";
-  if (["SUPERVISOR"].includes(r)) return "/portal/supervisor";
-  if (["MERCHANT"].includes(r)) return "/portal/merchant";
-  if (["CUSTOMER"].includes(r)) return "/portal/customer";
-  if (["RIDER", "DRIVER", "HELPER"].includes(r)) return "/portal/execution";
-  return "/portal/operations";
-}
 
 export type NavItem = { id: string; label_en: string; label_mm: string; path: string; icon: LucideIcon; allowRoles?: string[]; requiredPermissions?: string[]; children?: NavItem[]; };
 export type NavSection = { id: string; title_en: string; title_mm: string; items: NavItem[]; };

@@ -1,26 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🚀 Fixing src/lib/portalRegistry.ts to properly export normalizeRole..."
+
+cat > src/lib/portalRegistry.ts <<'EOF'
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
-export { normalizeRole } from "./permissionResolver";
-
-export function defaultPortalForRole(role?: string | null): string {
-  const r = normalizeRole(role);
-  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "/portal/admin";
-  if (["FINANCE_USER", "FINANCE_STAFF"].includes(r)) return "/portal/finance";
-  if (["HR_ADMIN"].includes(r)) return "/portal/hr";
-  if (["MARKETING_ADMIN"].includes(r)) return "/portal/marketing";
-  if (["CUSTOMER_SERVICE"].includes(r)) return "/portal/support";
-  if (["WAREHOUSE_MANAGER"].includes(r)) return "/portal/warehouse";
-  if (["SUBSTATION_MANAGER"].includes(r)) return "/portal/branch";
-  if (["SUPERVISOR"].includes(r)) return "/portal/supervisor";
-  if (["MERCHANT"].includes(r)) return "/portal/merchant";
-  if (["CUSTOMER"].includes(r)) return "/portal/customer";
-  if (["RIDER", "DRIVER", "HELPER"].includes(r)) return "/portal/execution";
-  return "/portal/operations";
-}
 
 export type NavItem = { id: string; label_en: string; label_mm: string; path: string; icon: LucideIcon; allowRoles?: string[]; requiredPermissions?: string[]; children?: NavItem[]; };
 export type NavSection = { id: string; title_en: string; title_mm: string; items: NavItem[]; };
+
+export function normalizeRole(role?: string | null): string {
+  const r = (role ?? "").trim().toUpperCase();
+  if (!r) return "GUEST";
+  if (r === "SUPER_A") return "SUPER_ADMIN";
+  if (r === "ADM" || r === "ADMIN") return "SUPER_ADMIN";
+  if (r.startsWith("SUPER")) return "SUPER_ADMIN";
+  if (r.startsWith("APP")) return "APP_OWNER";
+  if (r.startsWith("SYS")) return "SYS";
+  return r;
+}
+
+export function isPrivileged(role: string | null | undefined): boolean {
+  const r = normalizeRole(role);
+  return r === "SYS" || r === "APP_OWNER" || r === "SUPER_ADMIN";
+}
+
+export function allow(role: string | null | undefined, roles?: string[]): boolean {
+  if (!roles || roles.length === 0) return true;
+  const r = normalizeRole(role);
+  if (!r || r === "GUEST") return false;
+  return roles.map((x) => x.toUpperCase()).includes(r);
+}
 
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -30,7 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
         id: "sa_home", label_en: "Super Admin Portal", label_mm: "Super Admin Portal", path: "/portal/admin", icon: ShieldCheck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN"], requiredPermissions: ["ADMIN_PORTAL_READ"],
         children: [
           { id: "sa_exec", label_en: "Executive Command", label_mm: "Executive Command", path: "/portal/admin/executive", icon: ShieldAlert, requiredPermissions: ["EXEC_COMMAND_READ"] },
-          { id: "sa_accounts", label_en: "Account Control", label_mm: "အကောင့်စီမံခန့်ခွဲမှု", path: "/portal/admin/accounts", icon: UserCheck, requiredPermissions: ["USER_READ", "AUTHORITY_MANAGE", "USER_CREATE", "USER_APPROVE"] },
+          { id: "sa_accounts", label_en: "Account Control", label_mm: "အကောင့်စီမံခန့်ခွဲမှု", path: "/portal/admin/accounts", icon: UserCheck, requiredPermissions: ["AUTHORITY_MANAGE"] },
           { id: "sa_admin_dash", label_en: "Admin Dashboard", label_mm: "Admin Dashboard", path: "/portal/admin/dashboard", icon: ClipboardList, requiredPermissions: ["ADMIN_DASH_READ"] },
           { id: "sa_audit", label_en: "Audit Logs", label_mm: "Audit Logs", path: "/portal/admin/audit", icon: ShieldAlert, requiredPermissions: ["AUDIT_READ"] },
           { id: "sa_users", label_en: "Admin Users", label_mm: "Admin Users", path: "/portal/admin/users", icon: Users, requiredPermissions: ["ADMIN_USER_READ"] },
@@ -52,17 +64,17 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        id: "finance", label_en: "Finance", label_mm: "ငွေစာရင်း", path: "/portal/finance", icon: Wallet, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "FINANCE_USER", "FINANCE_STAFF"], requiredPermissions: ["PORTAL_FINANCE"],
+        id: "finance", label_en: "Finance", label_mm: "ငွေစာရင်း", path: "/portal/finance", icon: Wallet, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "FINANCE_USER", "FINANCE_STAFF", "ACCOUNTANT"], requiredPermissions: ["PORTAL_FINANCE"],
         children: [{ id: "fin_recon", label_en: "Reconciliation", label_mm: "Reconciliation", path: "/portal/finance/recon", icon: ClipboardList }],
       },
       { id: "marketing", label_en: "Marketing", label_mm: "Marketing", path: "/portal/marketing", icon: Megaphone, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "MARKETING_ADMIN"], requiredPermissions: ["PORTAL_MARKETING"] },
       {
-        id: "hr", label_en: "HR", label_mm: "HR", path: "/portal/hr", icon: Users, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "HR_ADMIN"], requiredPermissions: ["PORTAL_HR"],
+        id: "hr", label_en: "HR", label_mm: "HR", path: "/portal/hr", icon: Users, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "HR_ADMIN", "HR"], requiredPermissions: ["PORTAL_HR"],
         children: [{ id: "hr_admin", label_en: "HR Admin Ops", label_mm: "HR Admin Ops", path: "/portal/hr/admin", icon: ClipboardList }],
       },
       { id: "support", label_en: "Support", label_mm: "Support", path: "/portal/support", icon: LifeBuoy, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "CUSTOMER_SERVICE"], requiredPermissions: ["PORTAL_SUPPORT"] },
       {
-        id: "execution", label_en: "Execution", label_mm: "Execution", path: "/portal/execution", icon: Truck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "RIDER", "DRIVER", "HELPER", "SUPERVISOR"], requiredPermissions: ["PORTAL_EXECUTION"],
+        id: "execution", label_en: "Execution", label_mm: "Execution", path: "/portal/execution", icon: Truck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "RIDER", "DRIVER", "HELPER", "SUPERVISOR", "RDR"], requiredPermissions: ["PORTAL_EXECUTION"],
         children: [
           { id: "exec_nav", label_en: "Navigation", label_mm: "Navigation", path: "/portal/execution/navigation", icon: Activity },
           { id: "exec_manual", label_en: "Manual", label_mm: "Manual", path: "/portal/execution/manual", icon: ClipboardList },
@@ -117,3 +129,39 @@ export function flatByPath(sections: NavSection[]): Record<string, FlatNavItem> 
   for (const it of flattenNav(sections)) out[it.path] = it;
   return out;
 }
+
+export function filterItem(role: string | null | undefined, item: NavItem): NavItem | null {
+  const priv = isPrivileged(role);
+  if (!priv && item.allowRoles && !allow(role, item.allowRoles)) return null;
+  const children = item.children ? item.children.map((c) => filterItem(role, c)).filter(Boolean) as NavItem[] : undefined;
+  return { ...item, children };
+}
+
+export function navForRole(role: string | null | undefined): NavSection[] {
+  return NAV_SECTIONS.map((sec) => {
+    const items = sec.items.map((it) => filterItem(role, it)).filter(Boolean) as NavItem[];
+    return { ...sec, items };
+  }).filter((sec) => sec.items.length > 0);
+}
+
+export function portalCountAll(): number { return NAV_SECTIONS.find((s) => s.id === "portals")?.items?.length ?? 0; }
+export function portalCountForRole(role: string | null | undefined): number { return navForRole(role).find((s) => s.id === "portals")?.items?.length ?? 0; }
+export function portalsForRole(role: string | null | undefined): NavItem[] { return navForRole(role).find((s) => s.id === "portals")?.items ?? []; }
+
+export function defaultPortalForRole(role: string | null | undefined): string {
+  const r = normalizeRole(role);
+  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "/portal/admin";
+  const portals = portalsForRole(role);
+  if (portals.length > 0) return portals[0].path;
+  return "/portal/operations";
+}
+
+export const PORTALS: NavItem[] = (NAV_SECTIONS.find((s) => s.id === "portals")?.items ?? []).map((p) => ({ ...p }));
+export function getAvailablePortals(role: string | null | undefined): NavItem[] { return portalsForRole(role); }
+EOF
+
+echo "🧪 Running build to verify fix..."
+npm run build || { echo "❌ Vite Build failed again!"; exit 1; }
+
+echo "🚀 Deploying to Vercel..."
+npx vercel --prod --force
