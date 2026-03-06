@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+// CRITICAL FIX: Ensure UserPlus is imported so the app doesn't crash on "request" view.
 import { AlertCircle, ArrowLeft, ArrowRight, Download, Mail, Lock, Loader2, Globe, Fingerprint, ShieldCheck, UserPlus } from "lucide-react";
 
 type View = "password" | "forgot" | "request" | "force_change" | "biometric_setup";
@@ -36,34 +37,26 @@ export default function Login() {
   const canNext = wIndex >= 0 && wIndex < wizardViews.length - 1;
 
   useEffect(() => {
-    let mounted = true;
     const run = async () => {
-      try {
-        if (!isSupabaseConfigured) return;
-        const { data } = await supabase.auth.getSession();
-        if (data?.session && mounted) {
-          await handleRouting(data.session.user.id);
-        }
-      } catch (err) {
-        console.error("Boot sequence error:", err);
-      } finally {
-        if (mounted) {
-          setTimeout(() => setIsBooting(false), 1500);
-        }
+      if (!isSupabaseConfigured) return setIsBooting(false);
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        await handleRouting(data.session.user.id);
+        return;
       }
+      setTimeout(() => setIsBooting(false), 1500);
     };
     run();
 
+    // CRITICAL FIX: Safely parse headers to avoid TypeError crashes on missing headers.
     fetch('/android.apk', { method: 'HEAD' }).then(res => {
-      if (!res.ok || !mounted) return;
+      if (!res.ok) return;
       const len = res.headers.get('content-length');
       const size = len ? (parseInt(len) / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown';
       const lastMod = res.headers.get('last-modified');
       const updated = lastMod ? new Date(lastMod).toISOString().split('T')[0] : 'Recent';
       setApkMeta({ size, updated });
     }).catch(() => {});
-
-    return () => { mounted = false; };
   }, []);
 
   const handleRouting = async (userId: string) => {
@@ -84,57 +77,50 @@ export default function Login() {
     setLoading(true);
     setErrorMsg("");
     setRememberMe(remember);
-    try {
-      const { data, error } = await login(email, password);
-      if (error) throw error;
-      if (!data?.user?.id) throw new Error("Authentication verification failed.");
-
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-      const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
-      
-      const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
-      const mustChange = profile?.must_change_password === true || isDefault;
-
-      if (mustChange && !["SUPER_ADMIN", "APP_OWNER"].includes(role)) {
-        setView("force_change");
-      } else {
-        setView("biometric_setup");
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Login system encountered an error.");
-    } finally {
+    const { data, error } = await login(email, password);
+    
+    if (error) {
+      setErrorMsg(error.message);
       setLoading(false);
+      return;
     }
+
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    const role = (profile?.role || profile?.role_code || 'GUEST').toUpperCase();
+    
+    // Default password policy enforcement
+    const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
+    const mustChange = profile?.must_change_password === true || isDefault;
+
+    if (mustChange && !["SUPER_ADMIN", "APP_OWNER"].includes(role)) {
+      setView("force_change");
+    } else {
+      setView("biometric_setup");
+    }
+    setLoading(false);
   };
 
   const handleForceChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg("");
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPass });
-      if (error) throw error;
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
-         await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
-      }
-      setView("biometric_setup");
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to update security credentials.");
-    } finally {
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    if (error) {
+      setErrorMsg(error.message);
       setLoading(false);
+      return;
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+       await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
+    }
+    setView("biometric_setup");
+    setLoading(false);
   };
 
   const finalizeLogin = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) await handleRouting(user.id);
-      else navigate("/portal/operations");
-    } catch {
-      navigate("/portal/operations");
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await handleRouting(user.id);
   };
 
   if (isBooting) {

@@ -10,13 +10,9 @@ export function PortalShell({ title, links, children }: { title: string; links?:
 
   useEffect(() => {
     async function loadTier() {
-      try {
-        if (!user?.id) return;
-        const { data } = await supabase.from("profiles").select('*').eq("id", user.id).maybeSingle();
-        if (data) setTierLevel((data as any).tier_level || (data as any).tier || null);
-      } catch (err) {
-        // ignore
-      }
+      if (!user?.id) return;
+      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (data) setTierLevel((data as any).tier_level || (data as any).tier || null);
     }
     loadTier();
   }, [user?.id]);

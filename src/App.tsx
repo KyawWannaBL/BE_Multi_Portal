@@ -1,36 +1,78 @@
 import React, { Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
-import { RequireAuth } from "@/routes/RequireAuth";
-import { RequireRole } from "@/routes/RequireRole";
+
+import AdminLayout from "./components/AdminLayout";
+
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
-import ResetPassword from "./pages/ResetPassword";
-import DashboardRedirect from "./pages/DashboardRedirect";
-import ExecutiveCommandCenter from "@/pages/portals/admin/ExecutiveCommandCenter";
+import ForgotPassword from "./pages/ForgotPassword";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import AccountControl from "./pages/AccountControl";
+import HRPortal from "./pages/HRPortal";
+
+import AuthCallback from "./pages/AuthCallback";
+import SecurityUpdate from "./pages/SecurityUpdate";
+import Unauthorized from "./pages/Unauthorized";
+
+import { RequireAuth } from "@/routes/RequireAuth";
+import { RequirePasswordRotation } from "@/routes/RequirePasswordRotation";
+import { RequireRole } from "@/routes/RequireRole";
+
+const Loading = () => (
+  <div className="min-h-screen bg-[#05080F] flex items-center justify-center text-[10px] text-emerald-500 font-mono tracking-widest uppercase animate-pulse">
+    INITIALIZING L5 SECURE GATEWAY...
+  </div>
+);
 
 export default function App() {
   return (
     <LanguageProvider>
-      <Suspense fallback={<div className="bg-[#05080F] min-h-screen" />}>
+      <Suspense fallback={<Loading />}>
         <Router>
           <Routes>
+            {/* Public */}
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
 
+            {/* SSO callback */}
+            <Route path="/auth/callback" element={<AuthCallback />} />
+
+            {/* Policy enforcement */}
+            <Route path="/security-update" element={<SecurityUpdate />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+
+            {/* Protected */}
             <Route element={<RequireAuth />}>
-              <Route path="/" element={<DashboardRedirect />} />
-              <Route
-                path="/portal/admin/executive"
-                element={
-                  <RequireRole allow={["SUPER_ADMIN", "SYS", "APP_OWNER"]}>
-                    <ExecutiveCommandCenter />
-                  </RequireRole>
-                }
-              />
+              <Route element={<RequirePasswordRotation />}>
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireRole
+                      allow={[
+                        "SUPER_ADMIN",
+                        "OPERATIONS_ADMIN",
+                        "FINANCE_ADMIN",
+                        "MARKETING_ADMIN",
+                        "CUSTOMER_SERVICE_ADMIN",
+                        "MGR",
+                      ]}
+                    >
+                      <AdminLayout />
+                    </RequireRole>
+                  }
+                >
+                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route path="dashboard" element={<SuperAdminDashboard />} />
+                  <Route path="accounts" element={<AccountControl />} />
+                  <Route path="hr" element={<HRPortal />} />
+                </Route>
+              </Route>
             </Route>
 
+            {/* Defaults */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </Router>

@@ -17,21 +17,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        // FIXED: Stop 400 errors by using select('*') and maybeSingle()
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-        setUser({ 
-          ...session.user, 
-          profile: profile || {}, 
-          role: profile?.role || profile?.role_code || 'GUEST' 
-        });
-      } else {
-        setUser(null);
+    let mounted = true;
+
+    const loadSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (mounted) setUser({ 
+            ...session.user, 
+            profile: profile || {}, 
+            role: profile?.role || profile?.role_code || 'GUEST' 
+          });
+        } else {
+          if (mounted) setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth context error:", err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
+    };
+
+    loadSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (_event === 'INITIAL_SESSION') return; // Handled by loadSession
+      setLoading(true);
+      try {
+        if (session?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (mounted) setUser({ 
+            ...session.user, 
+            profile: profile || {}, 
+            role: profile?.role || profile?.role_code || 'GUEST' 
+          });
+        } else {
+          if (mounted) setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth state change error:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     });
-    return () => subscription.unsubscribe();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
