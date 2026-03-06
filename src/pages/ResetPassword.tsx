@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { supabase, SUPABASE_CONFIGURED } from "@/supabaseClient";
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ export default function ResetPassword() {
             <h1 className="text-3xl font-black tracking-tight">BRITIUM L5</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>
 
-            <Button variant="ghost" className="text-slate-300 hover:bg-white/5" onClick={() => nav("/login")}>
+            <Button variant="ghost" className="text-slate-300 hover:bg-white/5 mt-2" onClick={() => nav("/login")}>
               <ArrowLeft className="h-4 w-4 mr-2" /> {t("Back to Login", "Login သို့ပြန်")}
             </Button>
           </div>
@@ -136,7 +136,7 @@ export default function ResetPassword() {
                     <CheckCircle2 className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
                     <Input type="password" required value={pw2} onChange={(e) => setPw2(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Confirm Password", "စကားဝှက် အတည်ပြု")} />
                   </div>
-                  <Button disabled={loading} type="submit" className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl">
+                  <Button disabled={loading} type="submit" className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-4">
                     {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : t("Update Password", "စကားဝှက် ပြောင်းမည်")}
                   </Button>
                 </form>

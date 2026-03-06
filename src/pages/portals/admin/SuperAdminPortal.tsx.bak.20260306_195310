@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/supabaseClient";
 import { getAvailablePortals, normalizeRole, PORTALS, portalCountAll, portalCountForRole, portalsForRole } from "@/lib/portalRegistry";
 import { PortalShell } from "@/components/layout/PortalShell";
 import TierBadge from "@/components/TierBadge";

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, SUPABASE_CONFIGURED } from "@/supabaseClient";
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { normalizeRole } from "@/lib/portalRegistry";
 
 const MFA_REQUIRED_ROLES = new Set(["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "ADM", "MGR", "ADMIN"]);

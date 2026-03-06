@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { supabase, SUPABASE_CONFIGURED, getRememberMe, setRememberMe } from "@/lib/supabase";
+import { supabase, SUPABASE_CONFIGURED, getRememberMe, setRememberMe } from "@/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { defaultPortalForRole, normalizeRole } from "@/lib/portalRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -369,6 +369,17 @@ export default function Login() {
               <div className="text-sm text-slate-300">
                 {t("Supabase environment variables are missing. Set them and redeploy.", "Supabase env var မရှိသေးပါ။ ထည့်ပြီး redeploy လုပ်ပါ။")}
               </div>
+              <pre className="text-[11px] whitespace-pre-wrap rounded-xl border border-white/10 bg-black/40 p-3 text-slate-300">
+                {readEnvHints()}
+              </pre>
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(readEnvHints())}>
+                  <Copy className="h-4 w-4 mr-2" /> {t("Copy", "ကူးယူ")}
+                </Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={() => window.location.reload()}>
+                  <RefreshCw className="h-4 w-4 mr-2" /> {t("Reload", "ပြန်ဖွင့်")}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -418,7 +429,7 @@ export default function Login() {
                   </div>
 
                   <div className="flex items-center justify-between px-1">
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold cursor-pointer">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold">
                       <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-emerald-500" />
                       {t("Remember me", "မှတ်ထားမည်")}
                     </label>
@@ -532,7 +543,7 @@ export default function Login() {
                           <div className="font-bold">{t("Manual key:", "Manual key:")}</div>
                           <div className="font-mono break-all">{mfaSecret}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button type="button" size="sm" variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(mfaSecret)}><Copy className="h-3 w-3 mr-2" /> {t("Copy", "ကူးယူ")}</Button>
+                            <Button size="sm" variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(mfaSecret)}><Copy className="h-3 w-3 mr-2" /> {t("Copy", "ကူးယူ")}</Button>
                           </div>
                         </div>
                       )}
