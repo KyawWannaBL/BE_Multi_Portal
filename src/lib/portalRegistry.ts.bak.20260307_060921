@@ -1,9 +1,8 @@
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
-import { allowedByRole, normalizeRole as prNormalizeRole } from "./permissionResolver";
-
-export const normalizeRole = prNormalizeRole;
+import { allowedByRole, normalizeRole } from "./permissionResolver";
+export { normalizeRole } from "./permissionResolver";
 
 export function defaultPortalForRole(role?: string | null): string {
   const r = normalizeRole(role);

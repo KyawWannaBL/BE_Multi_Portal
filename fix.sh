@@ -63,6 +63,8 @@ backup "$ACCT_CTRL"
 backup "$ACCT_STORE"
 backup "$SUPPLY_CHAIN"
 backup "$NOTIFY_LIB"
+backup "$DASH_REDIR"
+backup "$UNAUTH"
 
 # Restore original pages from git if they were modified/deleted
 git checkout HEAD -- src/pages/ 2>/dev/null || true
@@ -346,7 +348,7 @@ EOF
 # -----------------------------------------------------------------------------
 cat > "$RECENT_NAV" <<'EOF'
 export const RECENT_NAV_KEY = "be_recent_nav";
-export type RecentNavItem = { path: string; timestamp: number; };
+export type RecentNavItem = { path: string; label_en?: string; label_mm?: string; timestamp: number; };
 
 export function getRecentNav(): RecentNavItem[] {
   if (typeof window === "undefined") return [];
@@ -363,6 +365,14 @@ export function pushRecent(path: string) {
   const current = getRecentNav();
   const filtered = current.filter((x) => x.path !== path);
   filtered.unshift({ path, timestamp: Date.now() });
+  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
+}
+
+export function addRecentNav(item: Omit<RecentNavItem, "timestamp">) {
+  if (typeof window === "undefined") return;
+  const current = getRecentNav();
+  const filtered = current.filter((x) => x.path !== item.path);
+  filtered.unshift({ ...item, timestamp: Date.now() });
   window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
 }
 
@@ -474,6 +484,25 @@ cat > "$PORTAL_REGISTRY" <<'EOF'
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
+import { allowedByRole, normalizeRole as prNormalizeRole } from "./permissionResolver";
+
+export const normalizeRole = prNormalizeRole;
+
+export function defaultPortalForRole(role?: string | null): string {
+  const r = normalizeRole(role);
+  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "/portal/admin";
+  if (["FINANCE_USER", "FINANCE_STAFF"].includes(r)) return "/portal/finance";
+  if (["HR_ADMIN"].includes(r)) return "/portal/hr";
+  if (["MARKETING_ADMIN"].includes(r)) return "/portal/marketing";
+  if (["CUSTOMER_SERVICE"].includes(r)) return "/portal/support";
+  if (["WAREHOUSE_MANAGER"].includes(r)) return "/portal/warehouse";
+  if (["SUBSTATION_MANAGER"].includes(r)) return "/portal/branch";
+  if (["SUPERVISOR"].includes(r)) return "/portal/supervisor";
+  if (["MERCHANT"].includes(r)) return "/portal/merchant";
+  if (["CUSTOMER"].includes(r)) return "/portal/customer";
+  if (["RIDER", "DRIVER", "HELPER"].includes(r)) return "/portal/execution";
+  return "/portal/operations";
+}
 
 export type NavItem = { id: string; label_en: string; label_mm: string; path: string; icon: LucideIcon; allowRoles?: string[]; requiredPermissions?: string[]; children?: NavItem[]; };
 export type NavSection = { id: string; title_en: string; title_mm: string; items: NavItem[]; };
@@ -573,6 +602,23 @@ export function flatByPath(sections: NavSection[]): Record<string, FlatNavItem> 
   for (const it of flattenNav(sections)) out[it.path] = it;
   return out;
 }
+
+// --- Fully Implemented Legacy Functions ---
+export const PORTALS = NAV_SECTIONS.flatMap(sec => sec.items.map(item => ({
+  ...item,
+  name: item.label_en,
+  href: item.path,
+  description: item.label_mm,
+})));
+
+export const getAvailablePortals = (authOrRole?: any): any[] => {
+  const role = typeof authOrRole === 'string' ? authOrRole : authOrRole?.role;
+  return PORTALS.filter(p => allowedByRole({ role }, p.allowRoles));
+};
+
+export const portalCountAll = PORTALS.length;
+export const portalCountForRole = (role?: any) => getAvailablePortals(role).length;
+export const portalsForRole = getAvailablePortals;
 EOF
 
 cat > "$ACCT_STORE" <<'EOF'
@@ -1147,7 +1193,7 @@ export function PortalShell({ title, links, children }: { title: string; links?:
 EOF
 
 # -----------------------------------------------------------------------------
-# 5) ACCOUNT CONTROL (Enterprise NO SQL UI with baseline + notifications)
+# 5) ACCOUNT CONTROL & CORE SCREENS (Enterprise NO SQL UI + Redirects)
 # -----------------------------------------------------------------------------
 cat > "$ACCT_CTRL" <<'EOF'
 // @ts-nocheck
@@ -1937,22 +1983,305 @@ export default function AccountControl() {
 }
 EOF
 
-# -----------------------------------------------------------------------------
-# 6) Patch SignUp.tsx
-# -----------------------------------------------------------------------------
-if [ -f "$SIGNUP" ]; then
-  sed -i.bak 's/Access request submitted to L5 Command./Access request submitted to platform administrators./g' "$SIGNUP" || true
-  sed -i.bak 's/L5 Command/Platform Admin/g' "$SIGNUP" || true
-  rm -f "$SIGNUP.bak"
-fi
+cat > "$SUPER_ADMIN" <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { getAvailablePortals, portalCountAll } from "@/lib/portalRegistry";
+
+export default function SuperAdminPortal() {
+  const auth = useAuth() as any;
+  const portals = getAvailablePortals(auth);
+
+  return (
+    <PortalShell title="Command Center" links={[{to: "/portal/admin/accounts", label: "Account Control"}]}>
+      <div className="mb-6">
+        <h1 className="text-2xl font-black uppercase text-white italic">Platform Portals</h1>
+        <p className="text-sm text-slate-400">Total active modules: {portalCountAll}</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {portals.map((p: any) => {
+          const Icon = p.icon;
+          return (
+            <Link key={p.id} to={p.href} className="block group">
+              <div className="p-5 rounded-2xl bg-[#0B101B] border border-white/10 group-hover:border-emerald-500/50 group-hover:bg-emerald-500/5 transition-all h-full">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-emerald-500/20 group-hover:text-emerald-400 text-slate-300 transition-colors">
+                    {Icon ? <Icon className="h-6 w-6" /> : <div className="h-6 w-6 bg-slate-500 rounded" />}
+                  </div>
+                  <div>
+                    <div className="text-white font-bold uppercase tracking-widest">{p.name}</div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">{p.description}</div>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </PortalShell>
+  );
+}
+EOF
+
+cat > "$DASH_REDIR" <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { defaultPortalForRole } from "@/lib/portalRegistry";
+
+export default function DashboardRedirect() {
+  const { role, loading } = useAuth() as any;
+  if (loading) return null;
+  if (!role) return <Navigate to="/login" replace />;
+  return <Navigate to={defaultPortalForRole(role)} replace />;
+}
+EOF
+
+cat > "$UNAUTH" <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ShieldAlert } from "lucide-react";
+
+export default function Unauthorized() {
+  const loc = useLocation();
+  const state = loc.state as any;
+
+  return (
+    <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-[#0B101B] border border-white/10 p-8 rounded-3xl text-center">
+        <div className="mx-auto w-16 h-16 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mb-6">
+          <ShieldAlert size={32} />
+        </div>
+        <h1 className="text-2xl font-black text-white uppercase italic tracking-widest mb-2">Access Denied</h1>
+        <p className="text-slate-400 text-sm mb-6">
+          {state?.detail || "You don't have permission to access this area."}
+        </p>
+        <Link to="/" className="inline-flex items-center justify-center h-11 px-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold uppercase text-xs tracking-widest transition-colors">
+          Return to Home
+        </Link>
+      </div>
+    </div>
+  );
+}
+EOF
+
+cat > "$LOGIN" <<'EOF'
+// @ts-nocheck
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { defaultPortalForRole } from "@/lib/portalRegistry";
+import { ShieldCheck, AlertTriangle } from "lucide-react";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth() as any;
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const { data, error: loginError } = await login(email, password);
+      if (loginError) throw loginError;
+      
+      const role = data?.user?.user_metadata?.role || "GUEST";
+      navigate(defaultPortalForRole(role));
+    } catch (err: any) {
+      setError(err.message || "Failed to sign in");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4 text-slate-300">
+      <div className="max-w-md w-full bg-[#0B101B] border border-white/10 p-8 rounded-3xl shadow-2xl">
+        <div className="flex justify-center mb-6">
+          <div className="w-16 h-16 bg-sky-500/10 text-sky-500 rounded-full flex items-center justify-center shadow-inner">
+            <ShieldCheck size={32} />
+          </div>
+        </div>
+        <h1 className="text-2xl font-black text-white uppercase tracking-widest text-center mb-2">System Login</h1>
+        <p className="text-center text-slate-500 text-sm mb-8">Authenticate to access the enterprise portal</p>
+        
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-slate-500 font-mono mb-2">Email Address</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full h-12 bg-[#05080F] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-sky-500/50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-slate-500 font-mono mb-2">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full h-12 bg-[#05080F] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-sky-500/50"
+              required
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full h-12 mt-6 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl uppercase tracking-widest disabled:opacity-50 transition-colors"
+          >
+            {loading ? "Authenticating..." : "Secure Sign In"}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-slate-500">
+          Need an account? <Link to="/signup" className="text-sky-400 hover:text-sky-300 font-bold ml-1">Request Access</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+EOF
+
+cat > "$SIGNUP" <<'EOF'
+// @ts-nocheck
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
+
+export default function SignUp() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } }
+      });
+      if (signUpError) throw signUpError;
+      setSuccess(true);
+    } catch (err: any) {
+      setError(err.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-[#0B101B] border border-white/10 p-8 rounded-3xl text-center shadow-2xl">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center">
+              <CheckCircle2 size={32} />
+            </div>
+          </div>
+          <h1 className="text-2xl font-black text-white uppercase tracking-widest mb-4">Request Submitted</h1>
+          <p className="text-slate-400 mb-8">Your account request has been submitted to platform administrators for approval.</p>
+          <Link to="/login" className="inline-flex items-center justify-center h-12 px-6 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl uppercase tracking-widest transition-colors w-full">
+            Return to Login
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#05080F] flex items-center justify-center p-4 text-slate-300">
+      <div className="max-w-md w-full bg-[#0B101B] border border-white/10 p-8 rounded-3xl shadow-2xl">
+        <h1 className="text-2xl font-black text-white uppercase tracking-widest text-center mb-2">Request Access</h1>
+        <p className="text-center text-slate-500 text-sm mb-8">Register for a new enterprise account</p>
+        
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-slate-500 font-mono mb-2">Full Name</label>
+            <input 
+              type="text" 
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full h-12 bg-[#05080F] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-sky-500/50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-slate-500 font-mono mb-2">Email Address</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full h-12 bg-[#05080F] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-sky-500/50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-slate-500 font-mono mb-2">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full h-12 bg-[#05080F] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-sky-500/50"
+              required minLength={6}
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full h-12 mt-6 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl uppercase tracking-widest disabled:opacity-50 transition-colors"
+          >
+            {loading ? "Submitting..." : "Submit Request"}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-slate-500">
+          Already have an account? <Link to="/login" className="text-sky-400 hover:text-sky-300 font-bold ml-1">Sign In</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+EOF
 
 # -----------------------------------------------------------------------------
 # 7) Push & Deploy Fix
 # -----------------------------------------------------------------------------
-echo "✅ Enterprise portal registry, sidebars, and safe stubs configured."
+echo "✅ Enterprise portal registry, core screens, sidebars, and logic successfully generated."
 
 git add .
-git commit -m "fix: enforce safe routing architecture, unify supabaseClient paths, and add robust wizard login" || echo "No changes to commit."
+git commit -m "fix: override legacy Login & SignUp with robust replacements to solve vite rollup export failures" || echo "No changes to commit."
 
 git push origin master || git push origin main || echo "Push failed, but continuing to deploy..."
 
