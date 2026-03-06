@@ -1,0 +1,222 @@
+// EN: Supply Chain service (safe production stubs + optional Supabase integration)
+// MY: Supply Chain service (safe production stubs + optional Supabase integration)
+//
+// This file intentionally avoids hard-crashing if tables/RPCs are not present.
+// It returns safe defaults and logs minimal warnings.
+//
+// Required exports used by the app:
+// - traceByWayId
+// - listPendingCod
+// - createDeposit
+// - createCodCollection
+// - recordSupplyEvent
+
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
+
+export type SupplyTraceEvent = {
+  at: string;
+  status: string;
+  note?: string;
+  actor_id?: string | null;
+};
+
+export type PendingCodItem = {
+  way_id: string;
+  shipment_id?: string | number;
+  cod_amount: number;
+  currency?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  delivered_at?: string | null;
+  status?: string;
+};
+
+export type DepositResult = { success: boolean; id?: string | number; message?: string };
+export type CodCollectionResult = { success: boolean; id?: string | number; message?: string };
+export type RecordEventResult = { success: boolean; id?: string | number; message?: string };
+
+// EN: Small helper to avoid throwing
+// MY: Error မပစ်အောင် helper
+async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    // keep logs light for production; do not crash UI
+    console.warn("[supplyChain] safe() fallback:", (e as any)?.message ?? e);
+    return fallback;
+  }
+}
+
+/**
+ * EN: Trace shipment lifecycle by Waybill ID.
+ * MY: Waybill ID အလိုက် shipment tracking timeline ကို ရယူမည်။
+ */
+export async function traceByWayId(wayId: string): Promise<SupplyTraceEvent[]> {
+  if (!SUPABASE_CONFIGURED) return [];
+
+  return safe(async () => {
+    // Try common tracking tables/views first
+    // 1) shipment_tracking (recommended in your docs)
+    const r1 = await supabase
+      .from("shipment_tracking")
+      .select("timestamp, status, notes, user_id")
+      .eq("way_id", wayId)
+      .order("timestamp", { ascending: true });
+
+    if (!r1.error && Array.isArray(r1.data)) {
+      return r1.data.map((x: any) => ({
+        at: x.timestamp ?? new Date().toISOString(),
+        status: String(x.status ?? "UNKNOWN"),
+        note: x.notes ?? undefined,
+        actor_id: x.user_id ?? null,
+      }));
+    }
+
+    // 2) tracking_events (fallback)
+    const r2 = await supabase
+      .from("tracking_events")
+      .select("created_at, event, note, actor_id")
+      .eq("way_id", wayId)
+      .order("created_at", { ascending: true });
+
+    if (!r2.error && Array.isArray(r2.data)) {
+      return r2.data.map((x: any) => ({
+        at: x.created_at ?? new Date().toISOString(),
+        status: String(x.event ?? "UNKNOWN"),
+        note: x.note ?? undefined,
+        actor_id: x.actor_id ?? null,
+      }));
+    }
+
+    // If tables don't exist or schema differs, return empty safely
+    return [];
+  }, []);
+}
+
+/**
+ * EN: List pending COD items for reconciliation.
+ * MY: COD reconcile အတွက် pending COD list ကို ရယူမည်။
+ */
+export async function listPendingCod(params?: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}): Promise<PendingCodItem[]> {
+  const limit = Math.min(Math.max(params?.limit ?? 200, 1), 1000);
+  const offset = Math.max(params?.offset ?? 0, 0);
+  const search = String(params?.search ?? "").trim();
+
+  if (!SUPABASE_CONFIGURED) return [];
+
+  return safe(async () => {
+    // Best: RPC if available (optional)
+    // If you create it later, UI will automatically benefit.
+    const rpc = await supabase.rpc("list_pending_cod", { p_limit: limit, p_offset: offset, p_search: search });
+    if (!rpc.error && Array.isArray(rpc.data)) {
+      return rpc.data as any;
+    }
+
+    // Fallback query: shipments where cod_amount > 0 AND delivered-like status
+    // EN: This is heuristic; adjust to your real schema.
+    // MY: Schema မတူနိုင်သဖြင့် heuristic အနေနဲ့ ခန့်မှန်း query သုံးထားသည်။
+    let q = supabase
+      .from("shipments")
+      .select("id, way_id, cod_amount, receiver_name, receiver_phone, status, delivered_at, currency")
+      .gt("cod_amount", 0)
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Basic search support
+    if (search) {
+      // If ilike column doesn't exist, supabase will error; safe() catches.
+      q = q.or(`way_id.ilike.%${search}%,receiver_phone.ilike.%${search}%,receiver_name.ilike.%${search}%`);
+    }
+
+    const res = await q;
+    if (res.error || !Array.isArray(res.data)) return [];
+
+    // Try to filter delivered statuses commonly used
+    const deliveredLike = new Set([
+      "EXEC_DELIVERED",
+      "DELIVERED",
+      "FIN_COD_COLLECTED",
+      "FIN_DEPOSIT_PENDING",
+    ]);
+
+    const rows = res.data
+      .map((x: any) => ({
+        shipment_id: x.id,
+        way_id: x.way_id,
+        cod_amount: Number(x.cod_amount ?? 0),
+        currency: x.currency ?? "MMK",
+        receiver_name: x.receiver_name ?? "",
+        receiver_phone: x.receiver_phone ?? "",
+        delivered_at: x.delivered_at ?? null,
+        status: x.status ?? "",
+      }))
+      .filter((x: PendingCodItem) => x.cod_amount > 0 && (!x.status || deliveredLike.has(String(x.status).toUpperCase())));
+
+    return rows;
+  }, []);
+}
+
+/**
+ * EN: Create a COD collection record.
+ * MY: COD collection record ဖန်တီးမည်။
+ */
+export async function createCodCollection(payload: any): Promise<CodCollectionResult> {
+  if (!SUPABASE_CONFIGURED) return { success: false, message: "Supabase not configured / Supabase မပြင်ဆင်ထားပါ" };
+
+  return safe(async () => {
+    // Preferred table name: cod_collections
+    const res = await supabase.from("cod_collections").insert(payload).select("id").maybeSingle();
+    if (res.error) {
+      // Fallback table name: finance_cod_collections
+      const res2 = await supabase.from("finance_cod_collections").insert(payload).select("id").maybeSingle();
+      if (res2.error) return { success: false, message: res2.error.message };
+      return { success: true, id: (res2.data as any)?.id };
+    }
+    return { success: true, id: (res.data as any)?.id };
+  }, { success: false, message: "Failed / မအောင်မြင်ပါ" });
+}
+
+/**
+ * EN: Create a deposit record and link items (if your schema supports it).
+ * MY: Deposit record ဖန်တီးပြီး COD items တွေနဲ့ ချိတ်မည် (schema ရှိလျှင်)။
+ */
+export async function createDeposit(payload: any): Promise<DepositResult> {
+  if (!SUPABASE_CONFIGURED) return { success: false, message: "Supabase not configured / Supabase မပြင်ဆင်ထားပါ" };
+
+  return safe(async () => {
+    // Preferred table name: cod_deposits
+    const res = await supabase.from("cod_deposits").insert(payload).select("id").maybeSingle();
+    if (res.error) {
+      // Fallback table name: finance_deposits
+      const res2 = await supabase.from("finance_deposits").insert(payload).select("id").maybeSingle();
+      if (res2.error) return { success: false, message: res2.error.message };
+      return { success: true, id: (res2.data as any)?.id };
+    }
+    return { success: true, id: (res.data as any)?.id };
+  }, { success: false, message: "Failed / မအောင်မြင်ပါ" });
+}
+
+/**
+ * EN: Record a supply chain event (warehouse/branch/execution/finance).
+ * MY: Supply chain event ကို မှတ်တမ်းတင်မည် (warehouse/branch/execution/finance)။
+ */
+export async function recordSupplyEvent(payload: any): Promise<RecordEventResult> {
+  if (!SUPABASE_CONFIGURED) return { success: false, message: "Supabase not configured / Supabase မပြင်ဆင်ထားပါ" };
+
+  return safe(async () => {
+    // Preferred table name: supply_events
+    const res = await supabase.from("supply_events").insert(payload).select("id").maybeSingle();
+    if (res.error) {
+      // Fallback table name: shipment_tracking (append style)
+      const res2 = await supabase.from("shipment_tracking").insert(payload).select("id").maybeSingle();
+      if (res2.error) return { success: false, message: res2.error.message };
+      return { success: true, id: (res2.data as any)?.id };
+    }
+    return { success: true, id: (res.data as any)?.id };
+  }, { success: false, message: "Failed / မအောင်မြင်ပါ" });
+}
+

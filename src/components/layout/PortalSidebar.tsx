@@ -1,27 +1,59 @@
 // @ts-nocheck
 import React, { useState, useEffect, useMemo } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { navForRole, type NavItem } from "@/lib/portalRegistry";
-import { getRecentNav, addRecentNav, clearRecentNav, type RecentNavItem } from "@/lib/recentNav";
-import { Search, Clock, Trash2, X } from "lucide-react";
+import { NAV_SECTIONS, flatByPath, type NavItem, type NavSection } from "@/lib/portalRegistry";
+import { allowedByRole, hasAnyPermission, normalizeRole } from "@/lib/permissionResolver";
+import { clearRecentNav, getRecentNav, pushRecent, type RecentNavItem } from "@/lib/recentNav";
+import { Search, Clock, Trash2, X, History } from "lucide-react";
 import { loadStore, getAccountByEmail, effectivePermissions, roleIsPrivileged } from "@/lib/accountControlStore";
+
+function filterTree(auth: any, item: NavItem): NavItem | null {
+  if (!allowedByRole(auth, item.allowRoles)) return null;
+  if (!hasAnyPermission(auth, item.requiredPermissions)) return null;
+  const children = item.children ? item.children.map((c) => filterTree(auth, c)).filter(Boolean) as NavItem[] : undefined;
+  return { ...item, children };
+}
+
+function applyFilters(auth: any): NavSection[] {
+  return NAV_SECTIONS.map((sec) => {
+    const items = sec.items.map((it) => filterTree(auth, it)).filter(Boolean) as NavItem[];
+    return { ...sec, items };
+  }).filter((sec) => sec.items.length > 0);
+}
+
+function matches(item: NavItem, q: string): boolean {
+  const s = `${item.label_en} ${item.label_mm} ${item.path}`.toLowerCase();
+  return s.includes(q);
+}
+
+function filterBySearch(sections: NavSection[], q: string): NavSection[] {
+  if (!q) return sections;
+  const out: NavSection[] = [];
+  for (const sec of sections) {
+    const items: NavItem[] = [];
+    for (const it of sec.items) {
+      const childMatches = (it.children ?? []).filter((c) => matches(c, q));
+      const selfMatch = matches(it, q);
+      if (selfMatch || childMatches.length) {
+        items.push({ ...it, children: childMatches.length ? childMatches : it.children });
+      }
+    }
+    if (items.length) out.push({ ...sec, items });
+  }
+  return out;
+}
 
 function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; onNavigate?: () => void }) {
   const { lang } = useLanguage();
   const Icon = item.icon;
 
-  const handleClick = () => {
-    addRecentNav({ path: item.path, label_en: item.label_en, label_mm: item.label_mm });
-    if (onNavigate) onNavigate();
-  };
-
   return (
     <div className="space-y-1">
       <NavLink
         to={item.path}
-        onClick={handleClick}
+        onClick={onNavigate}
         className={({ isActive }) =>
           [
             "flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-black tracking-widest uppercase transition",
@@ -45,123 +77,91 @@ function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; 
   );
 }
 
-export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () => void; }) {
+export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const auth = useAuth() as any;
   const { lang } = useLanguage();
+  const loc = useLocation();
   const navigate = useNavigate();
 
-  const [search, setSearch] = useState("");
-  const [recent, setRecent] = useState<RecentNavItem[]>([]);
+  const [q, setQ] = useState("");
+  const [recentTick, setRecentTick] = useState(0);
 
   useEffect(() => {
-    setRecent(getRecentNav());
-  }, [auth?.user?.email, open]);
+    pushRecent(loc.pathname);
+    setRecentTick((x) => x + 1);
+  }, [loc.pathname]);
 
-  const userPerms = useMemo(() => {
-    const email = auth?.user?.email;
-    if (!email) return new Set<string>();
-    const store = typeof window !== "undefined" ? loadStore() : null;
-    if (!store) return new Set<string>();
-    const actor = getAccountByEmail(store.accounts, email);
-    if (!actor) return new Set<string>();
-    if (roleIsPrivileged(actor.role)) return new Set(["*"]);
-    return new Set(Array.from(effectivePermissions(store, actor)).map(String));
-  }, [auth?.user?.email]);
+  const sectionsRBAC = useMemo(() => applyFilters(auth), [auth?.role, auth?.user, auth?.permissions]);
+  const sections = useMemo(() => filterBySearch(sectionsRBAC, q.trim().toLowerCase()), [sectionsRBAC, q]);
 
-  const hasPerm = (req?: string[]) => {
-    if (userPerms.has("*")) return true;
-    if (!req || req.length === 0) return true;
-    return req.some(r => userPerms.has(r));
-  };
+  const flatMap = useMemo(() => flatByPath(sectionsRBAC), [sectionsRBAC]);
+  const recent = useMemo(() => getRecentNav(), [recentTick]);
 
-  const rawSections = navForRole(auth?.role);
-
-  const filteredSections = useMemo(() => {
-    function filterNav(items: NavItem[], q: string): NavItem[] {
-      return items.map(item => {
-        if (!hasPerm(item.requiredPermissions)) return null;
-        
-        const matchesQ = !q || item.label_en.toLowerCase().includes(q.toLowerCase()) || item.label_mm.toLowerCase().includes(q.toLowerCase());
-        const children = item.children ? filterNav(item.children, q) : undefined;
-        const hasVisibleChildren = children && children.length > 0;
-        
-        if (!matchesQ && !hasVisibleChildren) return null;
-        return { ...item, children };
-      }).filter(Boolean) as NavItem[];
+  const recentItems = useMemo(() => {
+    const items = [];
+    for (const r of recent.slice(0, 8)) {
+      const it = flatMap[r.path];
+      if (it) items.push(it);
     }
-
-    return rawSections.map(sec => {
-      const items = filterNav(sec.items, search);
-      return { ...sec, items };
-    }).filter(sec => sec.items.length > 0);
-  }, [rawSections, search, userPerms]);
+    return items;
+  }, [recent, flatMap]);
 
   const panel = (
-    <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] flex flex-col">
-      
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-        <input 
-          type="text"
-          placeholder={lang === "en" ? "Search navigation..." : "ရှာဖွေရန်..."}
-          className="w-full bg-black/40 border border-white/10 rounded-xl h-10 pl-9 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-            <X className="h-3 w-3" />
-          </button>
-        )}
+    <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] overflow-auto">
+      <div className="mb-4">
+        <div className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 h-11">
+          <Search className="h-4 w-4 text-slate-500" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={lang === "en" ? "Search menu..." : "မီနူးရှာရန်..."}
+            className="bg-transparent outline-none text-sm text-slate-200 w-full"
+          />
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-        {!search && recent.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase flex items-center gap-2">
-                <Clock className="h-3 w-3" /> {lang === "en" ? "RECENT" : "မကြာသေးမီက"}
-              </div>
-              <button onClick={() => { clearRecentNav(); setRecent([]); }} className="text-slate-500 hover:text-rose-400" title="Clear Recent">
-                <Trash2 className="h-3 w-3" />
-              </button>
+      {recentItems.length ? (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase flex items-center gap-2">
+              <History className="h-3 w-3" />
+              {lang === "en" ? "RECENT" : "မကြာသေးမီ"}
             </div>
-            <div className="space-y-1">
-              {recent.map((r, idx) => (
-                <button
-                  key={`${r.path}-${idx}`}
-                  onClick={() => {
-                    addRecentNav({ path: r.path, label_en: r.label_en, label_mm: r.label_mm });
-                    if (onClose) onClose();
-                    navigate(r.path);
-                  }}
-                  className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-black tracking-widest uppercase transition text-slate-300 hover:bg-white/5 hover:text-emerald-300"
-                >
-                  <span className="truncate">{lang === "en" ? r.label_en : r.label_mm}</span>
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => {
+                clearRecentNav();
+                setRecentTick((x) => x + 1);
+              }}
+              className="text-[10px] font-black tracking-widest uppercase text-slate-400 hover:text-white flex items-center gap-1"
+            >
+              <Trash2 className="h-3 w-3" />
+              {lang === "en" ? "Clear" : "ရှင်းမည်"}
+            </button>
           </div>
-        )}
 
-        {filteredSections.length === 0 ? (
-          <div className="text-center text-xs text-slate-600 mt-8 italic">
-            {lang === "en" ? "No matches found." : "ရှာမတွေ့ပါ။"}
+          <div className="space-y-2">
+            {recentItems.map((it) => (
+              <Item key={it.id} item={it} onNavigate={onClose} />
+            ))}
           </div>
-        ) : (
-          filteredSections.map((sec) => (
-            <div key={sec.id} className="mb-6">
-              <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
-                {lang === "en" ? sec.title_en : sec.title_mm}
-              </div>
-              <div className="space-y-2">
-                {sec.items.map((it) => (
-                  <Item key={it.id} item={it} onNavigate={onClose} />
-                ))}
-              </div>
-            </div>
-          ))
-        )}
+        </div>
+      ) : null}
+
+      {sections.map((sec) => (
+        <div key={sec.id} className="mb-6">
+          <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
+            {lang === "en" ? sec.title_en : sec.title_mm}
+          </div>
+          <div className="space-y-2">
+            {sec.items.map((it) => (
+              <Item key={it.id} item={it} onNavigate={onClose} />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="mt-6 text-[10px] font-mono text-slate-600">
+        ROLE: {normalizeRole(auth?.role)}
       </div>
     </aside>
   );
@@ -171,8 +171,8 @@ export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () =>
       <div className="hidden lg:block">{panel}</div>
       {open ? (
         <div className="lg:hidden fixed inset-0 z-[999]">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-          <div className="absolute left-3 top-20 animate-in slide-in-from-left duration-300">{panel}</div>
+          <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+          <div className="absolute left-3 top-20">{panel}</div>
         </div>
       ) : null}
     </>
