@@ -1,0 +1,422 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { supabase } from "@/lib/supabase";
+import { NAV_SECTIONS, flattenNav, type FlatNavItem, type NavSection } from "@/lib/portalRegistry";
+import { allowedByRole, hasAnyPermission } from "@/lib/permissionResolver";
+import { getRecent } from "@/lib/recentNav";
+import {
+  Activity,
+  ArrowRight,
+  KeyRound,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  UserCheck,
+  ClipboardList,
+  Search,
+  History,
+} from "lucide-react";
+
+type Health = "NOMINAL" | "DEGRADED" | "UNKNOWN";
+
+type MetricState = {
+  personnel: number | null;
+  riders: number | null;
+  securityEvents: number | null;
+  rotationRequired: number | null;
+  health: Health;
+};
+
+type AuditRow = {
+  id: number | string;
+  created_at: string;
+  event_type: string;
+  user_id?: string | null;
+  metadata?: any;
+};
+
+function fmt(n: number | null) {
+  if (n === null) return "—";
+  return new Intl.NumberFormat().format(n);
+}
+
+function relativeTime(iso: string, lang: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const diff = Date.now() - t;
+  const s = Math.floor(diff / 1000);
+  const tr = (en: string, mm: string) => (lang === "en" ? en : mm);
+
+  if (s < 10) return tr("just now", "ယခုပဲ");
+  if (s < 60) return tr(`${s}s ago`, `${s}s အရင်`);
+  const m = Math.floor(s / 60);
+  if (m < 60) return tr(`${m}m ago`, `${m}m အရင်`);
+  const h = Math.floor(m / 60);
+  if (h < 48) return tr(`${h}h ago`, `${h}h အရင်`);
+  const d = Math.floor(h / 24);
+  return tr(`${d}d ago`, `${d}ရက် အရင်`);
+}
+
+async function countProfilesTotal(): Promise<number | null> {
+  const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
+  if (res.error) return null;
+  return res.count ?? null;
+}
+
+async function countProfilesByRoleFields(roles: string[]): Promise<number | null> {
+  const fields = ["role", "role_code", "app_role", "user_role"];
+  for (const f of fields) {
+    // @ts-ignore
+    const res = await supabase.from("profiles").select("id", { count: "exact", head: true }).in(f, roles);
+    if (!res.error) return res.count ?? null;
+
+    const code = (res.error as any)?.code ?? "";
+    const msg = ((res.error as any)?.message ?? "").toLowerCase();
+    const missing = code === "42703" || msg.includes("does not exist") || (msg.includes("column") && msg.includes(f));
+    if (!missing) break;
+  }
+  return null;
+}
+
+async function countRotationRequired(): Promise<number | null> {
+  const fields = ["must_change_password", "requires_password_change", "requires_password_reset"];
+  for (const f of fields) {
+    // @ts-ignore
+    const res = await supabase.from("profiles").select("id", { count: "exact", head: true }).eq(f, true);
+    if (!res.error) return res.count ?? null;
+
+    const code = (res.error as any)?.code ?? "";
+    const msg = ((res.error as any)?.message ?? "").toLowerCase();
+    const missing = code === "42703" || msg.includes("does not exist") || (msg.includes("column") && msg.includes(f));
+    if (!missing) break;
+  }
+  return null;
+}
+
+async function countAuditEvents(): Promise<number | null> {
+  const res = await supabase.from("audit_logs").select("id", { count: "exact", head: true });
+  if (res.error) return null;
+  return res.count ?? null;
+}
+
+async function loadAuditFeed(limit = 15): Promise<AuditRow[]> {
+  const res = await supabase
+    .from("audit_logs")
+    .select("id, created_at, event_type, user_id, metadata")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (res.error) return [];
+  return (res.data as any) ?? [];
+}
+
+function eventBadge(eventType: string) {
+  const t = (eventType || "").toUpperCase();
+  if (t.includes("PASSWORD")) return { bg: "bg-amber-500/10", fg: "text-amber-300", icon: KeyRound };
+  if (t.includes("LOGIN")) return { bg: "bg-emerald-500/10", fg: "text-emerald-300", icon: Activity };
+  if (t.includes("SESSION")) return { bg: "bg-sky-500/10", fg: "text-sky-300", icon: ShieldCheck };
+  return { bg: "bg-white/5", fg: "text-slate-300", icon: ShieldAlert };
+}
+
+function filterSectionsByRBAC(auth: any): NavSection[] {
+  const filterItem = (it: any) => {
+    if (!allowedByRole(auth, it.allowRoles)) return null;
+    if (!hasAnyPermission(auth, it.requiredPermissions)) return null;
+    const children = it.children ? it.children.map(filterItem).filter(Boolean) : undefined;
+    return { ...it, children };
+  };
+
+  return NAV_SECTIONS
+    .map((sec) => {
+      const items = sec.items.map(filterItem).filter(Boolean);
+      return { ...sec, items };
+    })
+    .filter((s) => s.items.length > 0);
+}
+
+export default function SuperAdminPortal() {
+  const auth = useAuth() as any;
+  const { user, role } = auth;
+  const { lang } = useLanguage();
+  const navigate = useNavigate();
+  const t = (en: string, mm: string) => (lang === "en" ? en : mm);
+
+  const [metrics, setMetrics] = useState<MetricState>({
+    personnel: null,
+    riders: null,
+    securityEvents: null,
+    rotationRequired: null,
+    health: "UNKNOWN",
+  });
+
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [q, setQ] = useState("");
+  const [scope, setScope] = useState<"ALL" | "ADMIN" | "PORTALS">("ALL");
+
+  const sectionsRBAC = useMemo(() => filterSectionsByRBAC(auth), [auth?.role, auth?.user, auth?.permissions]);
+  const flat = useMemo(() => flattenNav(sectionsRBAC), [sectionsRBAC]);
+
+  const recent = useMemo(() => getRecent(8), []);
+  const recentItems = useMemo(() => {
+    const map = new Map(flat.map((x) => [x.path, x]));
+    return recent.map((r) => map.get(r.path)).filter(Boolean) as FlatNavItem[];
+  }, [recent, flat]);
+
+  const results = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const isScopeOk = (it: FlatNavItem) => {
+      if (scope === "ALL") return true;
+      if (scope === "ADMIN") return it.sectionId === "super_admin";
+      if (scope === "PORTALS") return it.sectionId === "portals";
+      return true;
+    };
+
+    return flat
+      .filter(isScopeOk)
+      .filter((it) => {
+        if (!qq) return true;
+        const s = `${it.label_en} ${it.label_mm} ${it.path}`.toLowerCase();
+        return s.includes(qq);
+      })
+      .slice(0, 40);
+  }, [flat, q, scope]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const riderRoles = ["RDR", "RIDER", "RIDER_USER", "DELIVERY_RIDER", "DRIVER", "HELPER"];
+
+      const [personnel, riders, securityEvents, rotationRequired, feed] = await Promise.all([
+        countProfilesTotal(),
+        countProfilesByRoleFields(riderRoles),
+        countAuditEvents(),
+        countRotationRequired(),
+        loadAuditFeed(15),
+      ]);
+
+      const anyOk =
+        personnel !== null ||
+        riders !== null ||
+        securityEvents !== null ||
+        rotationRequired !== null ||
+        (feed?.length ?? 0) > 0;
+
+      if (cancelled) return;
+
+      setMetrics({
+        personnel,
+        riders,
+        securityEvents,
+        rotationRequired,
+        health: anyOk ? "NOMINAL" : "DEGRADED",
+      });
+
+      setAudit(feed);
+      setLoading(false);
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      { title: t("TOTAL PERSONNEL", "ဝန်ထမ်းစုစုပေါင်း"), value: fmt(metrics.personnel), icon: Users, border: "border-sky-500/20" },
+      { title: t("ACTIVE RIDERS", "တာဝန်ထမ်းဆောင်နေသော Rider များ"), value: fmt(metrics.riders), icon: Activity, border: "border-emerald-500/20" },
+      { title: t("SECURITY EVENTS", "လုံခြုံရေးဖြစ်ရပ်များ"), value: fmt(metrics.securityEvents), icon: ShieldCheck, border: "border-amber-500/20" },
+      { title: t("ROTATION REQUIRED", "စကားဝှက်ပြောင်းရန်လိုအပ်သူများ"), value: fmt(metrics.rotationRequired), icon: KeyRound, border: "border-purple-500/20" },
+    ],
+    [metrics, lang]
+  );
+
+  return (
+    <PortalShell title={t("Super Admin Portal", "Super Admin Portal")}>
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/5 pb-6">
+          <div>
+            <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase">
+              {t("SESSION ACTIVE", "စနစ်ဝင်ရောက်ထားပါသည်")}
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-widest uppercase mt-2">
+              {t("Command Center", "စီမံခန့်ခွဲမှုစင်တာ")}
+            </h1>
+            <p className="text-sm text-slate-400 mt-1 font-mono">{(user as any)?.email ?? "—"}</p>
+            <p className="text-[10px] font-mono text-slate-600 mt-2">
+              ROLE: {String(role ?? "—")}
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-[10px] font-mono text-slate-500 tracking-widest uppercase">
+              {t("SYSTEM STATUS", "စနစ်အခြေအနေ")}
+            </p>
+            <div className="flex items-center gap-2 mt-2 justify-end">
+              <div className={`w-2 h-2 rounded-full ${metrics.health === "NOMINAL" ? "bg-emerald-500" : "bg-amber-500"} animate-pulse`} />
+              <span className={`text-xs font-mono tracking-widest uppercase ${metrics.health === "NOMINAL" ? "text-emerald-300" : "text-amber-300"}`}>
+                {metrics.health === "NOMINAL" ? t("ALL SYSTEMS NOMINAL", "စနစ်အခြေအနေကောင်းမွန်") : t("SYSTEM DEGRADED", "စနစ်အချို့ချို့ယွင်း")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <div key={i} className={`p-6 rounded-2xl bg-[#0B101B] border ${s.border} relative overflow-hidden`}>
+                <div className="absolute -right-6 -top-6 opacity-5">
+                  <Icon size={96} />
+                </div>
+                <div className="p-3 rounded-xl bg-white/5 w-fit">
+                  <Icon size={18} className="text-slate-200" />
+                </div>
+                <div className="mt-4">
+                  <div className="text-3xl font-black text-white">{s.value}</div>
+                  <div className="text-[10px] font-mono text-slate-400 tracking-widest uppercase mt-2">{s.title}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Search + Filters */}
+        <div className="rounded-2xl border border-white/10 bg-[#0B101B] p-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 h-11 w-full md:w-[480px]">
+              <Search className="h-4 w-4 text-slate-500" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={lang === "en" ? "Search portals & pages..." : "Portal နှင့် စာမျက်နှာများ ရှာရန်..."}
+                className="bg-transparent outline-none text-sm text-slate-200 w-full"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              {(["ALL", "ADMIN", "PORTALS"] as const).map((x) => (
+                <button
+                  key={x}
+                  onClick={() => setScope(x)}
+                  className={[
+                    "h-11 px-4 rounded-xl border text-[10px] font-black tracking-widest uppercase",
+                    scope === x ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10",
+                  ].join(" ")}
+                >
+                  {x === "ALL" ? (lang === "en" ? "All" : "အားလုံး") : x === "ADMIN" ? (lang === "en" ? "Admin" : "Admin") : (lang === "en" ? "Portals" : "Portal")}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {results.map((it) => {
+              const Icon = it.icon;
+              const sectionName = lang === "en" ? it.sectionTitle_en : it.sectionTitle_mm;
+
+              return (
+                <button
+                  key={it.path}
+                  onClick={() => navigate(it.path)}
+                  className="p-4 rounded-2xl bg-[#111622] border border-white/5 hover:border-white/20 hover:bg-white/5 transition-all text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="p-2 rounded-xl bg-white/5">
+                        <Icon size={18} className="text-slate-200" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-black text-white truncate">
+                          {lang === "en" ? it.label_en : it.label_mm}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500 tracking-widest uppercase truncate">
+                          {sectionName} • {it.path}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-slate-500" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Recent */}
+        {recentItems.length ? (
+          <div className="space-y-3">
+            <div className="text-sm font-black text-white tracking-widest uppercase flex items-center gap-2">
+              <History size={16} className="text-emerald-300" />
+              {t("Recently Visited", "မကြာသေးမီ ဝင်ရောက်ထားသည်")}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {recentItems.map((it) => {
+                const Icon = it.icon;
+                return (
+                  <button
+                    key={it.path}
+                    onClick={() => navigate(it.path)}
+                    className="p-6 rounded-2xl bg-[#111622] border border-white/5 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left"
+                  >
+                    <Icon className="text-emerald-300 mb-3" size={22} />
+                    <div className="text-lg font-black text-white uppercase tracking-widest">
+                      {lang === "en" ? it.label_en : it.label_mm}
+                    </div>
+                    <div className="mt-4 text-[10px] font-mono tracking-widest uppercase text-emerald-300 flex items-center gap-2">
+                      {t("Open", "ဝင်ရောက်မည်")} <ArrowRight size={12} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Live Audit Feed */}
+        <div className="space-y-3">
+          <div className="text-sm font-black text-white tracking-widest uppercase flex items-center gap-2">
+            <ShieldAlert size={16} className="text-amber-300" />
+            {t("Live Audit Feed", "လုံခြုံရေးမှတ်တမ်းများ")}
+          </div>
+
+          <div className="bg-[#0B101B] border border-white/5 rounded-2xl p-4 space-y-4 h-[320px] overflow-y-auto">
+            {loading ? (
+              <div className="text-xs font-mono text-slate-500">{t("Loading audit feed…", "မှတ်တမ်းများ ရယူနေပါသည်…")}</div>
+            ) : audit.length === 0 ? (
+              <div className="text-xs font-mono text-slate-500">{t("No audit events found.", "လုံခြုံရေးမှတ်တမ်း မတွေ့ရှိပါ။")}</div>
+            ) : (
+              audit.map((row) => {
+                const b = eventBadge(row.event_type);
+                const Icon = b.icon;
+                return (
+                  <div key={String(row.id)} className="flex gap-3 items-start border-b border-white/5 pb-3">
+                    <div className={`p-1.5 rounded-md ${b.bg} ${b.fg} mt-0.5`}>
+                      <Icon size={12} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-200 font-mono truncate">{row.event_type}</p>
+                      <p className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                        {row.user_id ? `user_id: ${String(row.user_id).slice(0, 8)}...` : "user_id: —"}
+                      </p>
+                      <p className={`text-[9px] font-mono mt-1 uppercase tracking-wider ${b.fg}/70`}>
+                        {relativeTime(row.created_at, lang)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </PortalShell>
+  );
+}
