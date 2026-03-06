@@ -1,11 +1,11 @@
 // @ts-nocheck
 import React, { useState, useEffect, useMemo } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NAV_SECTIONS, flatByPath, type NavItem, type NavSection } from "@/lib/portalRegistry";
 import { allowedByRole, hasAnyPermission, normalizeRole } from "@/lib/permissionResolver";
-import { clearRecentNav, getRecentNav, pushRecent } from "@/lib/recentNav";
+import { clearRecentNav, getRecentNav, pushRecent, type RecentNavItem } from "@/lib/recentNav";
 import { Search, History, Trash2 } from "lucide-react";
 
 function filterTree(auth: any, item: NavItem): NavItem | null {
@@ -80,6 +80,7 @@ export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () =>
   const auth = useAuth() as any;
   const { lang } = useLanguage();
   const loc = useLocation();
+  const navigate = useNavigate();
 
   const [q, setQ] = useState("");
   const [recentTick, setRecentTick] = useState(0);

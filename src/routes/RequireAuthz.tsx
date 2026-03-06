@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions, safeLower } from "@/lib/accountControlStore";
+import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions } from "@/lib/accountControlStore";
 import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
 import { hasAnyPermission } from "@/lib/permissionResolver";
 

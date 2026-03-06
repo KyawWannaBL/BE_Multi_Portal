@@ -71,7 +71,7 @@ git checkout HEAD -- src/pages/ 2>/dev/null || true
 # 1) INSTALL DEPENDENCIES & MOCK SUPPLY CHAIN
 # -----------------------------------------------------------------------------
 echo "📦 Installing required UI dependencies..."
-npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers --no-fund --no-audit
+npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers @supabase/supabase-js --no-fund --no-audit
 
 cat > "$SUPPLY_CHAIN" <<'EOF'
 // @ts-nocheck
@@ -797,7 +797,7 @@ cat > "$REQ_AUTHZ" <<'EOF'
 import React, { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions, safeLower } from "@/lib/accountControlStore";
+import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions } from "@/lib/accountControlStore";
 import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
 import { hasAnyPermission } from "@/lib/permissionResolver";
 
@@ -871,7 +871,7 @@ import { normalizeRole } from "@/lib/permissionResolver";
 
 export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
 
-export function getTier(role?: string, tierLevel?: any): Tier {
+export function getTier(role?: string, tierLevel?: unknown): Tier {
   const rawTier = String(tierLevel || "").trim().toUpperCase();
   if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
   if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
@@ -906,12 +906,12 @@ EOF
 cat > "$PORTAL_SIDEBAR" <<'EOF'
 // @ts-nocheck
 import React, { useState, useEffect, useMemo } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NAV_SECTIONS, flatByPath, type NavItem, type NavSection } from "@/lib/portalRegistry";
 import { allowedByRole, hasAnyPermission, normalizeRole } from "@/lib/permissionResolver";
-import { clearRecentNav, getRecentNav, pushRecent, type RecentNavItem } from "@/lib/recentNav";
+import { clearRecentNav, getRecentNav, pushRecent } from "@/lib/recentNav";
 import { Search, History, Trash2 } from "lucide-react";
 
 function filterTree(auth: any, item: NavItem): NavItem | null {
@@ -986,7 +986,6 @@ export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () =>
   const auth = useAuth() as any;
   const { lang } = useLanguage();
   const loc = useLocation();
-  const navigate = useNavigate();
 
   const [q, setQ] = useState("");
   const [recentTick, setRecentTick] = useState(0);
@@ -1159,7 +1158,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Download, History, Key, Lock, RefreshCw, Search, ShieldCheck, Upload, UserCog, UserPlus, XCircle, Inbox } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, History, Lock, RefreshCw, Search, ShieldCheck, Upload, UserCog, UserPlus, XCircle, Inbox } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { DEFAULT_ROLES, PERMISSIONS, STORAGE_KEY, type Account, type AccountStatus, type Permission, type Role, type AuthorityRequest, activeGrantsFor, can, canApplyAuthorityDirect, canRequestAuthorityChange, csvParse, csvStringify, defaultPortalPermissionsForRole, defaultGovernancePermissionsForRole, effectivePermissions, ensureAtLeastOneSuperAdminActive, getAccountByEmail, grantDirect, isEmailValid, loadStore, nowIso, pushAudit, rejectAuthorityRequest, requestAuthorityChange, revokeDirect, roleIsPrivileged, safeLower, saveStore, approveAuthorityRequest, uuid } from "@/lib/accountControlStore";
 
@@ -1963,8 +1962,8 @@ for i in {1..3}; do
     echo "✅ Vercel deployment successful!"
     exit 0
   fi
-  echo "⚠️ Vercel API unreachable (Attempt $i/3). Retrying in 5 seconds..."
+  echo "⚠️ Vercel build/deployment failed (Attempt $i/3). Retrying in 5 seconds..."
   sleep 5
 done
 
-echo "❌ Deployment failed due to network/DNS issues. Please check your internet connection and run 'npx vercel --prod --force' manually."
+echo "❌ Deployment failed. Please check your Vercel logs for build details and run 'npx vercel --prod --force' manually."

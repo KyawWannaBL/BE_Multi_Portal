@@ -4,7 +4,7 @@ import { normalizeRole } from "@/lib/permissionResolver";
 
 export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
 
-export function getTier(role?: string, tierLevel?: unknown): Tier {
+export function getTier(role?: string, tierLevel?: any): Tier {
   const rawTier = String(tierLevel || "").trim().toUpperCase();
   if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
   if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
