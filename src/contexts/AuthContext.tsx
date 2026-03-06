@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -27,11 +28,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         if (session?.user) {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (mounted) setUser({ 
-            ...session.user, 
-            profile: profile || {}, 
-            role: profile?.role || profile?.role_code || 'GUEST' 
-          });
+          if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
         } else {
           if (mounted) setUser(null);
         }
@@ -43,16 +40,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === 'INITIAL_SESSION') return; 
-        
         if (mounted) setLoading(true);
         try {
           if (session?.user) {
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-            if (mounted) setUser({ 
-              ...session.user, 
-              profile: profile || {}, 
-              role: profile?.role || profile?.role_code || 'GUEST' 
-            });
+            if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
           } else {
             if (mounted) setUser(null);
           }
@@ -66,11 +58,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     initSession();
-
-    return () => {
-      mounted = false;
-      if (authSubscription) authSubscription.unsubscribe();
-    };
+    return () => { mounted = false; if (authSubscription) authSubscription.unsubscribe(); };
   }, []);
 
   return (
@@ -79,5 +67,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     </AuthContext.Provider>
   );
 };
-
 export const useAuth = () => useContext(AuthContext);

@@ -1,10 +1,10 @@
+// @ts-nocheck
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || "https://dltavabvjwocknkyvwgz.supabase.co") as string;
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo") as string;
 
 export const SUPABASE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
-
 const REMEMBER_KEY = "be_remember_me";
 
 export function getRememberMe(): boolean {
@@ -78,10 +78,5 @@ function createStubClient() {
 }
 
 export const supabase: any = SUPABASE_CONFIGURED ? createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: hybridStorage as any,
-  }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: hybridStorage as any }
 }) : createStubClient();

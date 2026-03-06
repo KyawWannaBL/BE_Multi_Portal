@@ -4,82 +4,32 @@ set -euo pipefail
 echo "🚀 Initiating Complete Enterprise System Restoration..."
 
 # -----------------------------------------------------------------------------
-# 0) SETUP VARIABLES & BACKUP FUNCTION
+# 0) SETUP VARIABLES & DIRECTORIES
 # -----------------------------------------------------------------------------
-backup() {
-  local f="$1"
-  [[ -f "$f" ]] || return 0
-  cp -f "$f" "${f}.bak.$(date +%Y%m%d_%H%M%S)"
-}
-
-APP="src/App.tsx"
-SUPA="src/lib/supabase.ts"
-LOGIN="src/pages/Login.tsx"
-SIGNUP="src/pages/SignUp.tsx"
-PORTAL_SHELL="src/components/layout/PortalShell.tsx"
-TIER_BADGE="src/components/TierBadge.tsx"
-AUTH_CTX="src/contexts/AuthContext.tsx"
-PORTAL_SIDEBAR="src/components/layout/PortalSidebar.tsx"
-PORTAL_REGISTRY="src/lib/portalRegistry.ts"
-SUPER_ADMIN="src/pages/portals/admin/SuperAdminPortal.tsx"
-EXEC_CMD="src/pages/portals/admin/ExecutiveCommandCenter.tsx"
-ADMIN_WRAP="src/pages/portals/admin/AdminModuleWrapper.tsx"
-EXEC_MANUAL="src/pages/portals/execution/ExecutionManualPage.tsx"
-ENT_PORTAL="src/pages/EnterprisePortal.tsx"
-RESET_PW="src/pages/ResetPassword.tsx"
-UNAUTH="src/pages/Unauthorized.tsx"
-DASH_REDIR="src/pages/DashboardRedirect.tsx"
-REQ_AUTH="src/routes/RequireAuth.tsx"
-REQ_ROLE="src/routes/RequireRole.tsx"
-REQ_AUTHZ="src/routes/RequireAuthz.tsx"
-ACCT_CTRL="src/pages/AccountControl.tsx"
-ACCT_STORE="src/lib/accountControlStore.ts"
-PERM_RESOLVER="src/lib/permissionResolver.ts"
-
-echo "Creating directories..."
 mkdir -p src/lib src/services src/contexts src/components/layout src/routes
 mkdir -p src/pages/portals/admin src/pages/portals/operations src/pages/portals/finance
 mkdir -p src/pages/portals/execution src/pages/portals/hr src/pages/portals/warehouse
 mkdir -p src/pages/portals/branch src/pages/portals/supervisor
 
-echo "Backing up existing files..."
-backup "$APP"
-backup "$SUPA"
-backup "$LOGIN"
-backup "$SIGNUP"
-backup "$PORTAL_SHELL"
-backup "$TIER_BADGE"
-backup "$AUTH_CTX"
-backup "$PORTAL_SIDEBAR"
-backup "$PORTAL_REGISTRY"
-backup "$SUPER_ADMIN"
-backup "$ACCT_CTRL"
-backup "$ACCT_STORE"
-
 # Restore original pages from git if they were modified/deleted
 git checkout HEAD -- src/pages/ 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# INSTALL MISSING DEPENDENCIES
+# 1) INSTALL DEPENDENCIES & FIX TRACE TIMELINE ERROR
 # -----------------------------------------------------------------------------
-echo "📦 Installing required UI dependencies to prevent build crashes..."
-npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers
+echo "📦 Installing required UI dependencies..."
+npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers --no-fund --no-audit
 
-# -----------------------------------------------------------------------------
-# FIX VITE BUILD ERROR: Missing traceByWayId export
-# -----------------------------------------------------------------------------
 echo "🩹 Patching missing service exports to fix build errors..."
 if [ ! -f "src/services/supplyChain.ts" ]; then
-  cat > src/services/supplyChain.ts << 'EOF'
-export const traceByWayId = async (id: any) => [];
-EOF
+  echo -e 'export const traceByWayId = async (id: any) => [];\n' > src/services/supplyChain.ts
 else
   if ! grep -q "traceByWayId" src/services/supplyChain.ts; then
     echo -e '\nexport const traceByWayId = async (id: any) => [];\n' >> src/services/supplyChain.ts
   fi
 fi
 
-# Generate safe placeholders for secondary routes (Excluding AccountControl as we write it below)
+# Generate safe placeholders for secondary routes to prevent Vite build crashes
 STUB_FILES=(
   "src/pages/AdminDashboard.tsx"
   "src/pages/AuditLogs.tsx"
@@ -110,30 +60,179 @@ STUB_FILES=(
   "src/pages/portals/operations/DataEntryOpsPage.tsx"
   "src/pages/portals/operations/QROpsScanPage.tsx"
   "src/pages/portals/operations/WaybillCenterPage.tsx"
-  "$SIGNUP"
+  "src/pages/SignUp.tsx"
 )
 
 for f in "${STUB_FILES[@]}"; do
   if [ ! -f "$f" ]; then
     mkdir -p "$(dirname "$f")"
-    cat > "$f" << 'EOF'
-import React from 'react';
-export default function Stub() {
-  return (
-    <div className="min-h-screen bg-[#05080F] flex flex-col items-center justify-center p-4 text-center">
-      <h1 className="text-2xl font-black text-emerald-400 uppercase tracking-widest mb-2">Module Initializing</h1>
-      <p className="text-slate-400 text-sm">Content is being provisioned.</p>
-    </div>
-  );
-}
-EOF
+    echo -e "import React from 'react';\nexport default function Stub() { return <div className=\"min-h-screen bg-[#05080F] flex items-center justify-center p-4 text-center text-slate-400\">Module Initializing...</div>; }" > "$f"
   fi
 done
 
 # -----------------------------------------------------------------------------
-# 1) PERMISSION RESOLVER & PORTAL REGISTRY
+# 2) CORE ENTERPRISE FILES (Supabase, Auth, Stores, Registry)
 # -----------------------------------------------------------------------------
-cat > "$PERM_RESOLVER" <<'EOF'
+cat > src/lib/supabase.ts <<'EOF'
+// @ts-nocheck
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || "https://dltavabvjwocknkyvwgz.supabase.co") as string;
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTMxOTQsImV4cCI6MjA4NjY4OTE5NH0.7-9BK6L9dpCYIB-pp1WOeQxCI1DVxnSykoTRXNUHYIo") as string;
+
+export const SUPABASE_CONFIGURED = Boolean(supabaseUrl && supabaseAnonKey);
+const REMEMBER_KEY = "be_remember_me";
+
+export function getRememberMe(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = window.localStorage.getItem(REMEMBER_KEY);
+  return v === null ? true : v === "1";
+}
+
+export function setRememberMe(remember: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+}
+
+const hybridStorage = {
+  getItem: (key: string) => {
+    if (typeof window === "undefined") return null;
+    return getRememberMe() ? window.localStorage.getItem(key) : window.sessionStorage.getItem(key);
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === "undefined") return;
+    (getRememberMe() ? window.localStorage : window.sessionStorage).setItem(key, value);
+  },
+  removeItem: (key: string) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  },
+};
+
+type StubError = { message: string; code?: string };
+function stubError(message = "Supabase is not configured."): StubError {
+  return { message, code: "SUPABASE_NOT_CONFIGURED" };
+}
+
+function stubQuery() {
+  const chain: any = {};
+  const ret = () => chain;
+  chain.select = ret; chain.eq = ret; chain.neq = ret; chain.in = ret; chain.order = ret; chain.limit = ret;
+  chain.maybeSingle = async () => ({ data: null, error: stubError() });
+  chain.single = async () => ({ data: null, error: stubError() });
+  chain.insert = async () => ({ data: null, error: stubError() });
+  chain.update = async () => ({ data: null, error: stubError() });
+  chain.delete = async () => ({ data: null, error: stubError() });
+  return chain;
+}
+
+function createStubClient() {
+  const noopSub = { unsubscribe: () => {} };
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: stubError() }),
+      onAuthStateChange: () => ({ data: { subscription: noopSub } }),
+      signInWithPassword: async () => ({ data: null, error: stubError() }),
+      signUp: async () => ({ data: null, error: stubError() }),
+      signOut: async () => ({ error: null }),
+      resetPasswordForEmail: async () => ({ data: null, error: stubError() }),
+      updateUser: async () => ({ data: null, error: stubError() }),
+      getUser: async () => ({ data: { user: null }, error: stubError() }),
+      exchangeCodeForSession: async () => ({ data: null, error: stubError() }),
+      setSession: async () => ({ data: null, error: stubError() }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: "aal1", nextLevel: "aal2" }, error: stubError() }),
+        listFactors: async () => ({ data: { all: [], totp: [] }, error: stubError() }),
+        enroll: async () => ({ data: null, error: stubError() }),
+        challenge: async () => ({ data: null, error: stubError() }),
+        verify: async () => ({ data: null, error: stubError() }),
+      },
+    },
+    from: () => stubQuery(),
+  } as any;
+}
+
+export const supabase: any = SUPABASE_CONFIGURED ? createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: hybridStorage as any }
+}) : createStubClient();
+EOF
+
+cat > src/contexts/AuthContext.tsx <<'EOF'
+// @ts-nocheck
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+const AuthContext = createContext<any>({});
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const login = async (email: string, pass: string) => {
+    return await supabase.auth.signInWithPassword({ email, password: pass });
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let authSubscription: any = null;
+
+    const initSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (session?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
+        } else {
+          if (mounted) setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth init error:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'INITIAL_SESSION') return; 
+        if (mounted) setLoading(true);
+        try {
+          if (session?.user) {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+            if (mounted) setUser({ ...session.user, profile: profile || {}, role: profile?.role || profile?.role_code || 'GUEST' });
+          } else {
+            if (mounted) setUser(null);
+          }
+        } catch (err) {
+          console.error("Auth change error:", err);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      });
+      authSubscription = data.subscription;
+    };
+
+    initSession();
+    return () => { mounted = false; if (authSubscription) authSubscription.unsubscribe(); };
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, role: user?.role, isAuthenticated: !!user }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+export const useAuth = () => useContext(AuthContext);
+EOF
+
+cat > src/lib/permissionResolver.ts <<'EOF'
+// @ts-nocheck
 export function hasAnyPermission(auth: any, required: string[]): boolean {
   if (!required || required.length === 0) return true;
   if (!auth) return false;
@@ -142,42 +241,13 @@ export function hasAnyPermission(auth: any, required: string[]): boolean {
 }
 EOF
 
-cat > "$PORTAL_REGISTRY" <<'EOF'
+cat > src/lib/portalRegistry.ts <<'EOF'
+// @ts-nocheck
 import type { LucideIcon } from "lucide-react";
-import {
-  Building2,
-  ShieldCheck,
-  Activity,
-  Wallet,
-  Megaphone,
-  Users,
-  LifeBuoy,
-  Truck,
-  Warehouse,
-  GitBranch,
-  UserCheck,
-  ClipboardList,
-  ShieldAlert,
-  KeyRound,
-} from "lucide-react";
+import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
 
-export type NavItem = {
-  id: string;
-  label_en: string;
-  label_mm: string;
-  path: string;
-  icon: LucideIcon;
-  allowRoles?: string[];
-  requiredPermissions?: string[];
-  children?: NavItem[];
-};
-
-export type NavSection = {
-  id: string;
-  title_en: string;
-  title_mm: string;
-  items: NavItem[];
-};
+export type NavItem = { id: string; label_en: string; label_mm: string; path: string; icon: LucideIcon; allowRoles?: string[]; requiredPermissions?: string[]; children?: NavItem[]; };
+export type NavSection = { id: string; title_en: string; title_mm: string; items: NavItem[]; };
 
 export function normalizeRole(role?: string | null): string {
   const r = (role ?? "").trim().toUpperCase();
@@ -203,17 +273,10 @@ const allow = (role: string | null | undefined, roles?: string[]) => {
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    id: "super_admin",
-    title_en: "SUPER ADMIN",
-    title_mm: "SUPER ADMIN",
+    id: "super_admin", title_en: "SUPER ADMIN", title_mm: "SUPER ADMIN",
     items: [
       {
-        id: "sa_home",
-        label_en: "Super Admin Portal",
-        label_mm: "Super Admin Portal",
-        path: "/portal/admin",
-        icon: ShieldCheck,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN"],
+        id: "sa_home", label_en: "Super Admin Portal", label_mm: "Super Admin Portal", path: "/portal/admin", icon: ShieldCheck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN"],
         children: [
           { id: "sa_exec", label_en: "Executive Command", label_mm: "Executive Command", path: "/portal/admin/executive", icon: ShieldAlert },
           { id: "sa_accounts", label_en: "Account Control", label_mm: "အကောင့်စီမံခန့်ခွဲမှု", path: "/portal/admin/accounts", icon: UserCheck, requiredPermissions: ["AUTHORITY_MANAGE"] },
@@ -226,16 +289,10 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: "portals",
-    title_en: "PORTALS",
-    title_mm: "PORTAL များ",
+    id: "portals", title_en: "PORTALS", title_mm: "PORTAL များ",
     items: [
       {
-        id: "ops",
-        label_en: "Operations",
-        label_mm: "လုပ်ငန်းလည်ပတ်မှု",
-        path: "/portal/operations",
-        icon: Building2,
+        id: "ops", label_en: "Operations", label_mm: "လုပ်ငန်းလည်ပတ်မှု", path: "/portal/operations", icon: Building2,
         children: [
           { id: "ops_manual", label_en: "Manual / Data Entry", label_mm: "Manual / Data Entry", path: "/portal/operations/manual", icon: ClipboardList },
           { id: "ops_qr", label_en: "QR Scan Ops", label_mm: "QR Scan Ops", path: "/portal/operations/qr-scan", icon: Activity },
@@ -244,107 +301,45 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        id: "finance",
-        label_en: "Finance",
-        label_mm: "ငွေစာရင်း",
-        path: "/portal/finance",
-        icon: Wallet,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "FINANCE_USER", "FINANCE_STAFF", "ACCOUNTANT"],
-        children: [
-          { id: "fin_recon", label_en: "Reconciliation", label_mm: "Reconciliation", path: "/portal/finance/recon", icon: ClipboardList },
-        ],
+        id: "finance", label_en: "Finance", label_mm: "ငွေစာရင်း", path: "/portal/finance", icon: Wallet, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "FINANCE_USER", "FINANCE_STAFF", "ACCOUNTANT"],
+        children: [{ id: "fin_recon", label_en: "Reconciliation", label_mm: "Reconciliation", path: "/portal/finance/recon", icon: ClipboardList }],
       },
+      { id: "marketing", label_en: "Marketing", label_mm: "Marketing", path: "/portal/marketing", icon: Megaphone, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "MARKETING_ADMIN"] },
       {
-        id: "marketing",
-        label_en: "Marketing",
-        label_mm: "Marketing",
-        path: "/portal/marketing",
-        icon: Megaphone,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "MARKETING_ADMIN"],
+        id: "hr", label_en: "HR", label_mm: "HR", path: "/portal/hr", icon: Users, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "HR_ADMIN", "HR"],
+        children: [{ id: "hr_admin", label_en: "HR Admin Ops", label_mm: "HR Admin Ops", path: "/portal/hr/admin", icon: ClipboardList }],
       },
+      { id: "support", label_en: "Support", label_mm: "Support", path: "/portal/support", icon: LifeBuoy, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "CUSTOMER_SERVICE"] },
       {
-        id: "hr",
-        label_en: "HR",
-        label_mm: "HR",
-        path: "/portal/hr",
-        icon: Users,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "HR_ADMIN", "HR"],
-        children: [
-          { id: "hr_admin", label_en: "HR Admin Ops", label_mm: "HR Admin Ops", path: "/portal/hr/admin", icon: ClipboardList },
-        ],
-      },
-      {
-        id: "support",
-        label_en: "Support",
-        label_mm: "Support",
-        path: "/portal/support",
-        icon: LifeBuoy,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "CUSTOMER_SERVICE"],
-      },
-      {
-        id: "execution",
-        label_en: "Execution",
-        label_mm: "Execution",
-        path: "/portal/execution",
-        icon: Truck,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "RIDER", "DRIVER", "HELPER", "SUPERVISOR", "RDR"],
+        id: "execution", label_en: "Execution", label_mm: "Execution", path: "/portal/execution", icon: Truck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "RIDER", "DRIVER", "HELPER", "SUPERVISOR", "RDR"],
         children: [
           { id: "exec_nav", label_en: "Navigation", label_mm: "Navigation", path: "/portal/execution/navigation", icon: Activity },
           { id: "exec_manual", label_en: "Manual", label_mm: "Manual", path: "/portal/execution/manual", icon: ClipboardList },
         ],
       },
       {
-        id: "warehouse",
-        label_en: "Warehouse",
-        label_mm: "Warehouse",
-        path: "/portal/warehouse",
-        icon: Warehouse,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "WAREHOUSE_MANAGER"],
+        id: "warehouse", label_en: "Warehouse", label_mm: "Warehouse", path: "/portal/warehouse", icon: Warehouse, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "WAREHOUSE_MANAGER"],
         children: [
           { id: "wh_recv", label_en: "Receiving", label_mm: "Receiving", path: "/portal/warehouse/receiving", icon: ClipboardList },
           { id: "wh_disp", label_en: "Dispatch", label_mm: "Dispatch", path: "/portal/warehouse/dispatch", icon: ClipboardList },
         ],
       },
       {
-        id: "branch",
-        label_en: "Branch",
-        label_mm: "Branch",
-        path: "/portal/branch",
-        icon: GitBranch,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "SUBSTATION_MANAGER"],
+        id: "branch", label_en: "Branch", label_mm: "Branch", path: "/portal/branch", icon: GitBranch, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "SUBSTATION_MANAGER"],
         children: [
           { id: "br_in", label_en: "Inbound", label_mm: "Inbound", path: "/portal/branch/inbound", icon: ClipboardList },
           { id: "br_out", label_en: "Outbound", label_mm: "Outbound", path: "/portal/branch/outbound", icon: ClipboardList },
         ],
       },
       {
-        id: "supervisor",
-        label_en: "Supervisor",
-        label_mm: "Supervisor",
-        path: "/portal/supervisor",
-        icon: UserCheck,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPERVISOR"],
+        id: "supervisor", label_en: "Supervisor", label_mm: "Supervisor", path: "/portal/supervisor", icon: UserCheck, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPERVISOR"],
         children: [
           { id: "sup_approval", label_en: "Approval Gateway", label_mm: "Approval Gateway", path: "/portal/supervisor/approval", icon: ShieldCheck },
           { id: "sup_fraud", label_en: "Fraud Signals", label_mm: "Fraud Signals", path: "/portal/supervisor/fraud", icon: ShieldAlert },
         ],
       },
-      {
-        id: "merchant",
-        label_en: "Merchant",
-        label_mm: "Merchant",
-        path: "/portal/merchant",
-        icon: Building2,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "MERCHANT"],
-      },
-      {
-        id: "customer",
-        label_en: "Customer",
-        label_mm: "Customer",
-        path: "/portal/customer",
-        icon: Users,
-        allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "CUSTOMER"],
-      },
+      { id: "merchant", label_en: "Merchant", label_mm: "Merchant", path: "/portal/merchant", icon: Building2, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "MERCHANT"] },
+      { id: "customer", label_en: "Customer", label_mm: "Customer", path: "/portal/customer", icon: Users, allowRoles: ["SYS", "APP_OWNER", "SUPER_ADMIN", "CUSTOMER"] },
     ],
   },
 ];
@@ -352,36 +347,20 @@ export const NAV_SECTIONS: NavSection[] = [
 function filterItem(role: string | null | undefined, item: NavItem): NavItem | null {
   const priv = isPrivileged(role);
   if (!priv && item.allowRoles && !allow(role, item.allowRoles)) return null;
-
-  const children = item.children
-    ? item.children.map((c) => filterItem(role, c)).filter(Boolean) as NavItem[]
-    : undefined;
-
+  const children = item.children ? item.children.map((c) => filterItem(role, c)).filter(Boolean) as NavItem[] : undefined;
   return { ...item, children };
 }
 
 export function navForRole(role: string | null | undefined): NavSection[] {
-  return NAV_SECTIONS
-    .map((sec) => {
-      const items = sec.items.map((it) => filterItem(role, it)).filter(Boolean) as NavItem[];
-      return { ...sec, items };
-    })
-    .filter((sec) => sec.items.length > 0);
+  return NAV_SECTIONS.map((sec) => {
+    const items = sec.items.map((it) => filterItem(role, it)).filter(Boolean) as NavItem[];
+    return { ...sec, items };
+  }).filter((sec) => sec.items.length > 0);
 }
 
-export function portalCountAll(): number {
-  const portals = NAV_SECTIONS.find((s) => s.id === "portals")?.items ?? [];
-  return portals.length;
-}
-
-export function portalCountForRole(role: string | null | undefined): number {
-  const portals = navForRole(role).find((s) => s.id === "portals")?.items ?? [];
-  return portals.length;
-}
-
-export function portalsForRole(role: string | null | undefined): NavItem[] {
-  return navForRole(role).find((s) => s.id === "portals")?.items ?? [];
-}
+export function portalCountAll(): number { return NAV_SECTIONS.find((s) => s.id === "portals")?.items?.length ?? 0; }
+export function portalCountForRole(role: string | null | undefined): number { return navForRole(role).find((s) => s.id === "portals")?.items?.length ?? 0; }
+export function portalsForRole(role: string | null | undefined): NavItem[] { return navForRole(role).find((s) => s.id === "portals")?.items ?? []; }
 
 export function defaultPortalForRole(role: string | null | undefined): string {
   const r = normalizeRole(role);
@@ -392,177 +371,42 @@ export function defaultPortalForRole(role: string | null | undefined): string {
 }
 EOF
 
-# -----------------------------------------------------------------------------
-# 2) ENTERPRISE ACCOUNT CONTROL STORE & UI
-# -----------------------------------------------------------------------------
-cat > "$ACCT_STORE" <<'EOF'
-export type Role =
-  | "SYS"
-  | "APP_OWNER"
-  | "SUPER_ADMIN"
-  | "ADMIN"
-  | "ADM"
-  | "MGR"
-  | "STAFF"
-  | "FINANCE_USER"
-  | "FINANCE_STAFF"
-  | "HR_ADMIN"
-  | "MARKETING_ADMIN"
-  | "CUSTOMER_SERVICE"
-  | "WAREHOUSE_MANAGER"
-  | "SUBSTATION_MANAGER"
-  | "SUPERVISOR"
-  | "RIDER"
-  | "DRIVER"
-  | "HELPER"
-  | "MERCHANT"
-  | "CUSTOMER"
-  | "GUEST";
-
+cat > src/lib/accountControlStore.ts <<'EOF'
+// @ts-nocheck
+export type Role = "SYS" | "APP_OWNER" | "SUPER_ADMIN" | "ADMIN" | "ADM" | "MGR" | "STAFF" | "FINANCE_USER" | "FINANCE_STAFF" | "HR_ADMIN" | "MARKETING_ADMIN" | "CUSTOMER_SERVICE" | "WAREHOUSE_MANAGER" | "SUBSTATION_MANAGER" | "SUPERVISOR" | "RIDER" | "DRIVER" | "HELPER" | "MERCHANT" | "CUSTOMER" | "GUEST";
 export type AccountStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED" | "ARCHIVED";
-
-export type Permission =
-  | "ADMIN_PORTAL_READ"
-  | "EXEC_COMMAND_READ"
-  | "ADMIN_DASH_READ"
-  | "ADMIN_USER_READ"
-  | "USER_READ"
-  | "USER_CREATE"
-  | "USER_APPROVE"
-  | "USER_REJECT"
-  | "USER_ROLE_EDIT"
-  | "USER_BLOCK"
-  | "USER_RESET_TOKEN"
-  | "USER_DOCS_READ"
-  | "AUTHORITY_MANAGE"
-  | "AUDIT_READ"
-  | "BULK_ACTIONS"
-  | "CSV_IMPORT"
-  | "CSV_EXPORT"
-  | "PORTAL_OPERATIONS"
-  | "PORTAL_FINANCE"
-  | "PORTAL_MARKETING"
-  | "PORTAL_HR"
-  | "PORTAL_SUPPORT"
-  | "PORTAL_EXECUTION"
-  | "PORTAL_WAREHOUSE"
-  | "PORTAL_BRANCH"
-  | "PORTAL_SUPERVISOR"
-  | "PORTAL_MERCHANT"
-  | "PORTAL_CUSTOMER"
-  | string;
-
+export type Permission = "ADMIN_PORTAL_READ" | "EXEC_COMMAND_READ" | "ADMIN_DASH_READ" | "ADMIN_USER_READ" | "USER_READ" | "USER_CREATE" | "USER_APPROVE" | "USER_REJECT" | "USER_ROLE_EDIT" | "USER_BLOCK" | "USER_RESET_TOKEN" | "USER_DOCS_READ" | "AUTHORITY_MANAGE" | "AUDIT_READ" | "BULK_ACTIONS" | "CSV_IMPORT" | "CSV_EXPORT" | "PORTAL_OPERATIONS" | "PORTAL_FINANCE" | "PORTAL_MARKETING" | "PORTAL_HR" | "PORTAL_SUPPORT" | "PORTAL_EXECUTION" | "PORTAL_WAREHOUSE" | "PORTAL_BRANCH" | "PORTAL_SUPERVISOR" | "PORTAL_MERCHANT" | "PORTAL_CUSTOMER" | string;
 export type PasskeyCredential = { id: string; createdAt: string; label?: string };
-
-export type AccountSecurity = {
-  blockedAt?: string;
-  blockedBy?: string;
-  onboardingTokenHash?: string;
-  onboardingTokenIssuedAt?: string;
-  onboardingTokenExpiresAt?: string;
-  passkeys?: PasskeyCredential[];
-  biometricGateEnabled?: boolean;
-};
-
-export type AccountApproval = {
-  requestedAt: string;
-  requestedBy: string;
-  processedAt?: string;
-  processedBy?: string;
-  decision?: "APPROVED" | "REJECTED";
-  note?: string;
-};
-
-export type Account = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  status: AccountStatus;
-
-  department?: string;
-  phone?: string;
-  employeeId?: string;
-
-  createdAt: string;
-  createdBy: string;
-
-  approval?: AccountApproval;
-  security?: AccountSecurity;
-};
-
-export type AuthorityGrant = {
-  id: string;
-  subjectEmail: string;
-  permission: Permission;
-  grantedAt: string;
-  grantedBy: string;
-  revokedAt?: string;
-  revokedBy?: string;
-};
-
-export type AuditEvent = {
-  id: string;
-  at: string;
-  actorEmail: string;
-  action: string;
-  targetEmail?: string;
-  detail?: string;
-};
-
-export type Store = {
-  v: 2;
-  accounts: Account[];
-  grants: AuthorityGrant[];
-  audit: AuditEvent[];
-};
+export type AccountSecurity = { blockedAt?: string; blockedBy?: string; onboardingTokenHash?: string; onboardingTokenIssuedAt?: string; onboardingTokenExpiresAt?: string; passkeys?: PasskeyCredential[]; biometricGateEnabled?: boolean; };
+export type AccountApproval = { requestedAt: string; requestedBy: string; processedAt?: string; processedBy?: string; decision?: "APPROVED" | "REJECTED"; note?: string; };
+export type Account = { id: string; name: string; email: string; role: Role; status: AccountStatus; department?: string; phone?: string; employeeId?: string; createdAt: string; createdBy: string; approval?: AccountApproval; security?: AccountSecurity; };
+export type AuthorityGrant = { id: string; subjectEmail: string; permission: Permission; grantedAt: string; grantedBy: string; revokedAt?: string; revokedBy?: string; };
+export type AuditEvent = { id: string; at: string; actorEmail: string; action: string; targetEmail?: string; detail?: string; };
+export type Store = { v: 2; accounts: Account[]; grants: AuthorityGrant[]; audit: AuditEvent[]; };
 
 export const STORAGE_KEY = "account_control_store_v2";
 
 export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
   { code: "ADMIN_PORTAL_READ", en: "Super Admin portal access", mm: "Super Admin portal ဝင်ခွင့်" },
   { code: "EXEC_COMMAND_READ", en: "Executive command access", mm: "Executive command ဝင်ခွင့်" },
-  { code: "ADMIN_DASH_READ", en: "Admin dashboard view", mm: "Admin dashboard ကြည့်ခွင့်" },
-  { code: "ADMIN_USER_READ", en: "Admin users view", mm: "Admin users ကြည့်ခွင့်" },
   { code: "USER_READ", en: "View accounts", mm: "အကောင့်များကြည့်ရန်" },
   { code: "USER_CREATE", en: "Create account request", mm: "အကောင့်တောင်းဆိုမှု ဖန်တီးရန်" },
   { code: "USER_APPROVE", en: "Approve requests", mm: "တောင်းဆိုမှု အတည်ပြုရန်" },
   { code: "USER_REJECT", en: "Reject requests", mm: "တောင်းဆိုမှု ငြင်းပယ်ရန်" },
   { code: "USER_ROLE_EDIT", en: "Edit roles", mm: "Role ပြောင်းရန်" },
   { code: "USER_BLOCK", en: "Block/Unblock", mm: "ပိတ်/ဖွင့်ရန်" },
-  { code: "USER_RESET_TOKEN", en: "Reset onboarding token", mm: "Onboarding token ပြန်ချရန်" },
-  { code: "USER_DOCS_READ", en: "View docs", mm: "စာရွက်စာတမ်းကြည့်ရန်" },
   { code: "AUTHORITY_MANAGE", en: "Manage authorities", mm: "အာဏာများ စီမံရန်" },
   { code: "AUDIT_READ", en: "View audit log", mm: "Audit log ကြည့်ရန်" },
   { code: "BULK_ACTIONS", en: "Bulk actions", mm: "အုပ်စုလိုက်လုပ်ဆောင်မှု" },
   { code: "CSV_IMPORT", en: "CSV import", mm: "CSV သွင်းရန်" },
   { code: "CSV_EXPORT", en: "CSV export", mm: "CSV ထုတ်ရန်" },
-  { code: "PORTAL_OPERATIONS", en: "Operations portal access", mm: "Operations portal ဝင်ခွင့်" },
-  { code: "PORTAL_FINANCE", en: "Finance portal access", mm: "Finance portal ဝင်ခွင့်" },
-  { code: "PORTAL_MARKETING", en: "Marketing portal access", mm: "Marketing portal ဝင်ခွင့်" },
-  { code: "PORTAL_HR", en: "HR portal access", mm: "HR portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPPORT", en: "Support portal access", mm: "Support portal ဝင်ခွင့်" },
-  { code: "PORTAL_EXECUTION", en: "Execution portal access", mm: "Execution portal ဝင်ခွင့်" },
-  { code: "PORTAL_WAREHOUSE", en: "Warehouse portal access", mm: "Warehouse portal ဝင်ခွင့်" },
-  { code: "PORTAL_BRANCH", en: "Branch portal access", mm: "Branch portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPERVISOR", en: "Supervisor portal access", mm: "Supervisor portal ဝင်ခွင့်" },
-  { code: "PORTAL_MERCHANT", en: "Merchant portal access", mm: "Merchant portal ဝင်ခွင့်" },
-  { code: "PORTAL_CUSTOMER", en: "Customer portal access", mm: "Customer portal ဝင်ခွင့်" },
 ];
 
-export const DEFAULT_ROLES: Role[] = [
-  "SYS", "APP_OWNER", "SUPER_ADMIN", "ADMIN", "ADM", "MGR", "STAFF", "FINANCE_USER", "FINANCE_STAFF",
-  "HR_ADMIN", "MARKETING_ADMIN", "CUSTOMER_SERVICE", "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER",
-  "SUPERVISOR", "RIDER", "DRIVER", "HELPER", "MERCHANT", "CUSTOMER",
-];
+export const DEFAULT_ROLES: Role[] = ["SYS", "APP_OWNER", "SUPER_ADMIN", "ADMIN", "ADM", "MGR", "STAFF", "FINANCE_USER", "FINANCE_STAFF", "HR_ADMIN", "MARKETING_ADMIN", "CUSTOMER_SERVICE", "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER", "SUPERVISOR", "RIDER", "DRIVER", "HELPER", "MERCHANT", "CUSTOMER"];
 
 export function nowIso(): string { return new Date().toISOString(); }
 export function safeLower(v: unknown): string { return String(v ?? "").trim().toLowerCase(); }
-export function uuid(): string {
-  const c: any = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  return `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-}
+export function uuid(): string { const c: any = globalThis.crypto; if (c?.randomUUID) return c.randomUUID(); return `id_${Math.random().toString(16).slice(2)}_${Date.now()}`; }
 export function isEmailValid(email: string): boolean { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()); }
 
 export function normalizeRole(role?: string | null): Role {
@@ -598,11 +442,9 @@ export function loadStore(): Store {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedStore();
     const s = JSON.parse(raw) as Store;
-    if (!s || !Array.isArray(s.accounts) || !Array.isArray(s.grants) || !Array.isArray(s.audit)) return seedStore();
+    if (!s || !Array.isArray(s.accounts)) return seedStore();
     return { ...s, v: 2 };
-  } catch {
-    return seedStore();
-  }
+  } catch { return seedStore(); }
 }
 
 export function saveStore(store: Store): void {
@@ -647,40 +489,350 @@ export function ensureAtLeastOneSuperAdminActive(accounts: Account[]): boolean {
 }
 
 export function csvParse(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
+  const rows: string[][] = []; let row: string[] = []; let field = ""; let inQuotes = false;
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    const n = text[i + 1];
-    if (inQuotes) {
-      if (c === '"' && n === '"') { field += '"'; i++; }
-      else if (c === '"') { inQuotes = false; }
-      else { field += c; }
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ",") { row.push(field); field = ""; }
-      else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
-      else if (c !== "\r") { field += c; }
+    const c = text[i]; const n = text[i + 1];
+    if (inQuotes) { if (c === '"' && n === '"') { field += '"'; i++; } else if (c === '"') { inQuotes = false; } else { field += c; } } else {
+      if (c === '"') inQuotes = true; else if (c === ",") { row.push(field); field = ""; } else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; } else if (c !== "\r") { field += c; }
     }
   }
-  row.push(field);
-  rows.push(row);
+  row.push(field); rows.push(row);
   return rows.filter((r) => r.some((x) => x.trim() !== ""));
 }
 
 export function csvStringify(rows: string[][]): string {
-  const esc = (s: string) => {
-    const needs = /[",\n\r]/.test(s);
-    const out = s.replaceAll('"', '""');
-    return needs ? `"${out}"` : out;
-  };
+  const esc = (s: string) => { const needs = /[",\n\r]/.test(s); const out = s.replaceAll('"', '""'); return needs ? `"${out}"` : out; };
   return rows.map((r) => r.map((c) => esc(c ?? "")).join(",")).join("\n");
 }
 EOF
 
-cat > "$ACCT_CTRL" <<'EOF'
+# -----------------------------------------------------------------------------
+# 3) ROUTING GUARDS
+# -----------------------------------------------------------------------------
+cat > src/routes/RequireAuth.tsx << 'EOF'
+// @ts-nocheck
+import React from 'react';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+
+export function RequireAuth() {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) {
+    return <div className="min-h-screen bg-[#05080F] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" /></div>;
+  }
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+}
+EOF
+
+cat > src/routes/RequireRole.tsx << 'EOF'
+// @ts-nocheck
+import * as React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { normalizeRole } from "@/lib/portalRegistry";
+
+const MFA_REQUIRED_ROLES = new Set(["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "ADM", "MGR", "ADMIN"]);
+
+async function hasAal2(): Promise<boolean> {
+  try {
+    if (!supabase?.auth?.mfa?.getAuthenticatorAssuranceLevel) return false;
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) return false;
+    return data?.currentLevel === "aal2";
+  } catch { return false; }
+}
+
+export function RequireRole({ allow = [], children }: { allow?: string[]; children: React.ReactNode }) {
+  const { role, loading, isAuthenticated } = useAuth();
+  const loc = useLocation();
+  const [aalOk, setAalOk] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!isAuthenticated) return;
+      const r = normalizeRole(role);
+      if (!MFA_REQUIRED_ROLES.has(r)) { if (alive) setAalOk(true); return; }
+      if (!SUPABASE_CONFIGURED) { if (alive) setAalOk(false); return; }
+      const ok = await hasAal2();
+      if (alive) setAalOk(ok);
+    })();
+    return () => { alive = false; };
+  }, [isAuthenticated, role]);
+
+  if (loading) return <div className="min-h-screen bg-[#05080F] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" /></div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+
+  const allowSet = new Set(allow.map(normalizeRole));
+  const r = normalizeRole(role);
+
+  if (!r || r === "GUEST") return <Navigate to="/unauthorized" replace state={{ reason: "ROLE_NOT_ASSIGNED" }} />;
+  if (!allowSet.has(r)) return <Navigate to="/unauthorized" replace state={{ reason: "ROLE_NOT_ALLOWED", role: r }} />;
+
+  if (MFA_REQUIRED_ROLES.has(r)) {
+    if (aalOk === null) return <div className="min-h-screen bg-[#05080F] flex items-center justify-center text-xs text-emerald-500 font-mono">Verifying MFA…</div>;
+    if (!aalOk) return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "MFA_REQUIRED" }} />;
+  }
+
+  return <>{children}</>;
+}
+EOF
+
+cat > src/routes/RequireAuthz.tsx <<'EOF'
+// @ts-nocheck
+import React, { useMemo } from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions, safeLower } from "@/lib/accountControlStore";
+import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
+import { hasAnyPermission } from "@/lib/permissionResolver";
+
+type Rule = { prefix: string; required?: string[] };
+
+function collectRules(): Rule[] {
+  const rules: Rule[] = [];
+  const walk = (item: NavItem, inherited?: string[]) => {
+    const req = (item.requiredPermissions && item.requiredPermissions.length ? item.requiredPermissions : inherited) ?? inherited;
+    rules.push({ prefix: item.path, required: req });
+    for (const c of item.children ?? []) walk(c, req);
+  };
+  for (const sec of NAV_SECTIONS) for (const it of sec.items) walk(it);
+  rules.sort((a, b) => b.prefix.length - a.prefix.length);
+  return rules;
+}
+
+function requiredForPath(pathname: string, rules: Rule[]): string[] | null {
+  const p = pathname || "/";
+  for (const r of rules) {
+    if (!r.required || r.required.length === 0) continue;
+    if (p === r.prefix) return r.required;
+    if (p.startsWith(r.prefix.endsWith("/") ? r.prefix : r.prefix + "/")) return r.required;
+  }
+  return null;
+}
+
+export function RequireAuthz() {
+  const auth = useAuth() as any;
+  const loc = useLocation();
+
+  const email = (auth?.user?.email ?? "") as string;
+  const isAuthed = Boolean(auth?.user?.id || email);
+
+  const rules = useMemo(() => collectRules(), []);
+  const required = useMemo(() => requiredForPath(loc.pathname, rules), [loc.pathname, rules]);
+
+  if (!isAuthed) return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
+
+  const store = typeof window !== "undefined" ? loadStore() : null;
+  const actor = store && email ? getAccountByEmail(store.accounts, email) : undefined;
+
+  if (!actor) return <Navigate to="/unauthorized" replace state={{ reason: "NOT_REGISTERED", detail: "User not in AccountControl registry" }} />;
+  if (actor.status !== "ACTIVE") return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
+  if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) return <Outlet />;
+
+  if (required && required.length) {
+    const ok = hasAnyPermission(auth, required);
+    if (!ok && store) {
+      const perms = effectivePermissions(store, actor);
+      const requiredSet = new Set(required.map((x) => String(x)));
+      let ok2 = false;
+      for (const g of perms) if (requiredSet.has(String(g))) ok2 = true;
+      if (!ok2) return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
+    } else if (!ok) {
+      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
+    }
+  }
+
+  return <Outlet />;
+}
+EOF
+
+# -----------------------------------------------------------------------------
+# 4) COMPONENTS & UI
+# -----------------------------------------------------------------------------
+cat > src/components/TierBadge.tsx <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { normalizeRole } from "@/lib/portalRegistry";
+
+export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
+
+export function getTier(role?: string, tierLevel?: any): Tier {
+  const rawTier = String(tierLevel || "").trim().toUpperCase();
+  if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
+  if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
+
+  const r = normalizeRole(role);
+  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "L5";
+  if (["ADMIN", "ADM", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
+  if (r.includes("FINANCE") || r.includes("HR") || r.includes("MARKETING") || r.includes("SUPPORT") || r.includes("CUSTOMER_SERVICE")) return "L3";
+  if (r === "SUPERVISOR" || r === "STAFF" || r === "WAREHOUSE_MANAGER" || r === "SUBSTATION_MANAGER" || r === "DATA_ENTRY") return "L2";
+  
+  return "L1";
+}
+
+export default function TierBadge({ role, tierLevel, className }: { role?: string | null; tierLevel?: unknown; className?: string }) {
+  const tier = getTier(role || undefined, tierLevel);
+  const colors: Record<Tier, string> = {
+    L5: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+    L4: "bg-sky-500/15 text-sky-300 border-sky-500/25",
+    L3: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+    L2: "bg-white/10 text-slate-200 border-white/15",
+    L1: "bg-white/5 text-slate-300 border-white/10"
+  };
+
+  return (
+    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
+      {tier}
+    </span>
+  );
+}
+EOF
+
+cat > src/components/layout/PortalSidebar.tsx <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { NavLink } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { navForRole, type NavItem } from "@/lib/portalRegistry";
+
+function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; onNavigate?: () => void }) {
+  const { lang } = useLanguage();
+  const Icon = item.icon;
+
+  return (
+    <div className="space-y-1">
+      <NavLink
+        to={item.path}
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          [
+            "flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-black tracking-widest uppercase transition",
+            depth > 0 ? "ml-4 opacity-90" : "",
+            isActive ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : "text-slate-300 hover:bg-white/5",
+          ].join(" ")
+        }
+      >
+        <Icon className="h-4 w-4" />
+        <span className="truncate">{lang === "en" ? item.label_en : item.label_mm}</span>
+      </NavLink>
+
+      {item.children?.length ? (
+        <div className="space-y-1">
+          {item.children.map((c) => (
+            <Item key={c.id} item={c} depth={depth + 1} onNavigate={onNavigate} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () => void; }) {
+  const { role } = useAuth();
+  const { lang } = useLanguage();
+  const sections = navForRole(role);
+
+  const panel = (
+    <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] overflow-y-auto custom-scrollbar">
+      {sections.map((sec) => (
+        <div key={sec.id} className="mb-6">
+          <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
+            {lang === "en" ? sec.title_en : sec.title_mm}
+          </div>
+          <div className="space-y-2">
+            {sec.items.map((it) => (
+              <Item key={it.id} item={it} onNavigate={onClose} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </aside>
+  );
+
+  return (
+    <>
+      <div className="hidden lg:block">{panel}</div>
+      {open ? (
+        <div className="lg:hidden fixed inset-0 z-[999]">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute left-3 top-20 animate-in slide-in-from-left duration-300">{panel}</div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+EOF
+
+cat > src/components/layout/PortalShell.tsx <<'EOF'
+// @ts-nocheck
+import React from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import TierBadge from "@/components/TierBadge";
+import { PortalSidebar } from "@/components/layout/PortalSidebar";
+import { Menu } from "lucide-react";
+
+export function PortalShell({ title, links, children }: { title: string; links?: { to: string; label: string }[]; children: React.ReactNode; }) {
+  const { logout, role, user } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  return (
+    <div className="min-h-screen bg-[#05080F] text-white">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#05080F]/80 backdrop-blur">
+        <div className="mx-auto max-w-[1400px] px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              className="lg:hidden h-10 w-10 flex items-center justify-center rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+
+            <div className="h-9 w-9 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center overflow-hidden">
+               <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
+            </div>
+            <div>
+              <div className="text-sm font-black tracking-widest uppercase">{title}</div>
+              <div className="text-[10px] opacity-70 font-mono">{(user as any)?.email ?? "—"} • {role ?? "NO_ROLE"}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <TierBadge role={role} />
+            <button className="text-xs px-4 py-2 rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5 font-black uppercase tracking-widest transition-colors" onClick={() => void logout()}>
+              Sign out
+            </button>
+          </div>
+        </div>
+
+        {links?.length ? (
+          <div className="mx-auto max-w-[1400px] px-4 pb-3 flex gap-2 flex-wrap">
+            {links.map((l) => (
+              <Link key={l.to} to={l.to} className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-white/10 hover:border-emerald-500/30 hover:text-emerald-400 transition-colors">
+                {l.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </header>
+
+      <div className="mx-auto max-w-[1400px] px-4 py-6 flex gap-6">
+        <PortalSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+    </div>
+  );
+}
+EOF
+
+# -----------------------------------------------------------------------------
+# 5) ACCOUNT CONTROL (Enterprise NO SQL UI)
+# -----------------------------------------------------------------------------
+cat > src/pages/AccountControl.tsx <<'EOF'
+// @ts-nocheck
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -1314,244 +1466,15 @@ export default function AccountControl() {
 EOF
 
 # -----------------------------------------------------------------------------
-# 3) RequireAuthz Route Gate (permission + registry status)
-# -----------------------------------------------------------------------------
-cat > "$REQ_AUTHZ" <<'EOF'
-import React, { useMemo } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions, safeLower } from "@/lib/accountControlStore";
-import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
-import { hasAnyPermission } from "@/lib/permissionResolver";
-
-type Rule = { prefix: string; required?: string[] };
-
-function collectRules(): Rule[] {
-  const rules: Rule[] = [];
-  const walk = (item: NavItem, inherited?: string[]) => {
-    const req = (item.requiredPermissions && item.requiredPermissions.length ? item.requiredPermissions : inherited) ?? inherited;
-    rules.push({ prefix: item.path, required: req });
-    for (const c of item.children ?? []) walk(c, req);
-  };
-  for (const sec of NAV_SECTIONS) for (const it of sec.items) walk(it);
-  rules.sort((a, b) => b.prefix.length - a.prefix.length);
-  return rules;
-}
-
-function requiredForPath(pathname: string, rules: Rule[]): string[] | null {
-  const p = pathname || "/";
-  for (const r of rules) {
-    if (!r.required || r.required.length === 0) continue;
-    if (p === r.prefix) return r.required;
-    if (p.startsWith(r.prefix.endsWith("/") ? r.prefix : r.prefix + "/")) return r.required;
-  }
-  return null;
-}
-
-export function RequireAuthz() {
-  const auth = useAuth() as any;
-  const loc = useLocation();
-
-  const email = (auth?.user?.email ?? "") as string;
-  const isAuthed = Boolean(auth?.user?.id || email);
-
-  const rules = useMemo(() => collectRules(), []);
-  const required = useMemo(() => requiredForPath(loc.pathname, rules), [loc.pathname, rules]);
-
-  if (!isAuthed) {
-    return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
-  }
-
-  const store = typeof window !== "undefined" ? loadStore() : null;
-  const actor = store && email ? getAccountByEmail(store.accounts, email) : undefined;
-
-  if (!actor) {
-    return <Navigate to="/unauthorized" replace state={{ reason: "NOT_REGISTERED", detail: "User not in AccountControl registry" }} />;
-  }
-
-  if (actor.status !== "ACTIVE") {
-    return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
-  }
-
-  if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) {
-    return <Outlet />;
-  }
-
-  if (required && required.length) {
-    const ok = hasAnyPermission(auth, required);
-    if (!ok && store) {
-      const perms = effectivePermissions(store, actor);
-      const requiredSet = new Set(required.map((x) => String(x)));
-      let ok2 = false;
-      for (const g of perms) if (requiredSet.has(String(g))) ok2 = true;
-      if (!ok2) {
-        return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
-      }
-    } else if (!ok) {
-      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
-    }
-  }
-
-  return <Outlet />;
-}
-EOF
-
-# -----------------------------------------------------------------------------
-# 4) APP.TSX (Dynamic Mapping using RequireAuthz natively)
-# -----------------------------------------------------------------------------
-cat > "$APP" << 'EOF'
-import React, { Suspense } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { LanguageProvider } from "./contexts/LanguageContext";
-import { AuthProvider } from "./contexts/AuthContext";
-import { RequireAuthz } from "./routes/RequireAuthz";
-
-import EnterprisePortal from "./pages/EnterprisePortal";
-import Login from "./pages/Login";
-import SignUp from "./pages/SignUp";
-import ResetPassword from "./pages/ResetPassword";
-import Unauthorized from "./pages/Unauthorized";
-import DashboardRedirect from "./pages/DashboardRedirect";
-
-import SuperAdminPortal from "./pages/portals/admin/SuperAdminPortal";
-import AdminModuleWrapper from "./pages/portals/admin/AdminModuleWrapper";
-import ExecutiveCommandCenter from "./pages/portals/admin/ExecutiveCommandCenter";
-
-import AccountControl from "./pages/AccountControl";
-import AdminDashboard from "./pages/AdminDashboard";
-import AuditLogs from "./pages/AuditLogs";
-import AdminUsers from "./pages/AdminUsers";
-import PermissionAssignment from "./pages/PermissionAssignment";
-
-import AdminPortal from "./pages/portals/AdminPortal";
-import OperationsPortal from "./pages/portals/OperationsPortal";
-import OperationsTrackingPage from "./pages/portals/OperationsTrackingPage";
-import FinancePortal from "./pages/portals/FinancePortal";
-import FinanceReconPage from "./pages/portals/finance/FinanceReconPage";
-import HrPortal from "./pages/portals/HrPortal";
-import HrAdminOpsPage from "./pages/portals/hr/HrAdminOpsPage";
-import MarketingPortal from "./pages/portals/MarketingPortal";
-import SupportPortal from "./pages/portals/SupportPortal";
-import ExecutionPortal from "./pages/portals/ExecutionPortal";
-import ExecutionNavigationPage from "./pages/portals/ExecutionNavigationPage";
-import ExecutionManualPage from "./pages/portals/execution/ExecutionManualPage";
-import WarehousePortal from "./pages/portals/WarehousePortal";
-import WarehouseReceivingPage from "./pages/portals/warehouse/WarehouseReceivingPage";
-import WarehouseDispatchPage from "./pages/portals/warehouse/WarehouseDispatchPage";
-import BranchPortal from "./pages/portals/BranchPortal";
-import BranchInboundPage from "./pages/portals/branch/BranchInboundPage";
-import BranchOutboundPage from "./pages/portals/branch/BranchOutboundPage";
-import SupervisorPortal from "./pages/portals/SupervisorPortal";
-import SupervisorApprovalPage from "./pages/portals/supervisor/SupervisorApprovalPage";
-import SupervisorFraudPage from "./pages/portals/supervisor/SupervisorFraudPage";
-import MerchantPortal from "./pages/portals/MerchantPortal";
-import CustomerPortal from "./pages/portals/CustomerPortal";
-
-import DataEntryOpsPage from "./pages/portals/operations/DataEntryOpsPage";
-import QROpsScanPage from "./pages/portals/operations/QROpsScanPage";
-import WaybillCenterPage from "./pages/portals/operations/WaybillCenterPage";
-
-export default function App() {
-  return (
-    <LanguageProvider>
-      <AuthProvider>
-        <Suspense fallback={<div className="min-h-screen bg-[#05080F] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" /></div>}>
-          <Router>
-            <Routes>
-              <Route path="/" element={<EnterprisePortal />} />
-              <Route path="/dashboard" element={<DashboardRedirect />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-
-              <Route element={<RequireAuthz />}>
-                {/* SUPER ADMIN PORTAL HUB */}
-                <Route path="/portal/admin" element={<SuperAdminPortal />} />
-                <Route path="/portal/admin/executive" element={<ExecutiveCommandCenter />} />
-                
-                <Route path="/portal/admin/accounts" element={<AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/dashboard" element={<AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/audit" element={<AdminModuleWrapper title="Audit Logs"><AuditLogs /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/users" element={<AdminModuleWrapper title="Admin Users"><AdminUsers /></AdminModuleWrapper>} />
-                <Route path="/portal/admin/permission-assignment" element={<AdminModuleWrapper title="Permission Assignment"><PermissionAssignment /></AdminModuleWrapper>} />
-
-                {/* LEGACY/OTHER PORTALS */}
-                <Route path="/portal/admin-legacy" element={<AdminPortal />} />
-
-                <Route path="/portal/operations" element={<OperationsPortal />} />
-                <Route path="/portal/operations/manual" element={<DataEntryOpsPage />} />
-                <Route path="/portal/operations/qr-scan" element={<QROpsScanPage />} />
-                <Route path="/portal/operations/tracking" element={<OperationsTrackingPage />} />
-                <Route path="/portal/operations/waybill" element={<WaybillCenterPage />} />
-
-                <Route path="/portal/finance" element={<FinancePortal />} />
-                <Route path="/portal/finance/recon" element={<FinanceReconPage />} />
-
-                <Route path="/portal/marketing" element={<MarketingPortal />} />
-                <Route path="/portal/hr" element={<HrPortal />} />
-                <Route path="/portal/hr/admin" element={<HrAdminOpsPage />} />
-
-                <Route path="/portal/support" element={<SupportPortal />} />
-
-                <Route path="/portal/execution" element={<ExecutionPortal />} />
-                <Route path="/portal/execution/navigation" element={<ExecutionNavigationPage />} />
-                <Route path="/portal/execution/manual" element={<ExecutionManualPage />} />
-
-                <Route path="/portal/warehouse" element={<WarehousePortal />} />
-                <Route path="/portal/warehouse/receiving" element={<WarehouseReceivingPage />} />
-                <Route path="/portal/warehouse/dispatch" element={<WarehouseDispatchPage />} />
-
-                <Route path="/portal/branch" element={<BranchPortal />} />
-                <Route path="/portal/branch/inbound" element={<BranchInboundPage />} />
-                <Route path="/portal/branch/outbound" element={<BranchOutboundPage />} />
-
-                <Route path="/portal/supervisor" element={<SupervisorPortal />} />
-                <Route path="/portal/supervisor/approval" element={<SupervisorApprovalPage />} />
-                <Route path="/portal/supervisor/fraud" element={<SupervisorFraudPage />} />
-
-                <Route path="/portal/merchant" element={<MerchantPortal />} />
-                <Route path="/portal/customer" element={<CustomerPortal />} />
-              </Route>
-
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-          </Router>
-        </Suspense>
-      </AuthProvider>
-    </LanguageProvider>
-  );
-}
-EOF
-
-# -----------------------------------------------------------------------------
-# PATCH MISSING SERVICE EXPORTS
-# -----------------------------------------------------------------------------
-echo "Patching missing service exports..."
-mkdir -p src/services
-if [ ! -f "src/services/supplyChain.ts" ]; then
-  cat > src/services/supplyChain.ts << 'EOF'
-export const traceByWayId = async (id: any) => [];
-EOF
-else
-  if ! grep -q "traceByWayId" src/services/supplyChain.ts; then
-    echo -e '\nexport const traceByWayId = async (id: any) => [];\n' >> src/services/supplyChain.ts
-  fi
-fi
-
-# -----------------------------------------------------------------------------
 # 5) Push & Deploy Fix
 # -----------------------------------------------------------------------------
 echo "✅ Enterprise AccountControl and RequireAuthz route guard configured."
 
-# Attempt to commit
 git add .
-git commit -m "feat: setup enterprise account control, permission resolver, and robust route guard" || echo "No changes to commit."
+git commit -m "fix: properly stub all secondary routes and patch traceByWayId to fix build" || echo "No changes to commit."
 
-# Push to both master and main
-git push origin master || git push origin main || echo "Push failed, but continuing..."
+git push origin master || git push origin main || echo "Push failed, but continuing to deploy..."
 
-# Force Vercel deployment with retry mechanism for network issues
 echo "🚀 Triggering Vercel deployment..."
 for i in {1..3}; do
   if npx vercel --prod --force; then

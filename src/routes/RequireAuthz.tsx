@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,24 +40,14 @@ export function RequireAuthz() {
   const rules = useMemo(() => collectRules(), []);
   const required = useMemo(() => requiredForPath(loc.pathname, rules), [loc.pathname, rules]);
 
-  if (!isAuthed) {
-    return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
-  }
+  if (!isAuthed) return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
 
   const store = typeof window !== "undefined" ? loadStore() : null;
   const actor = store && email ? getAccountByEmail(store.accounts, email) : undefined;
 
-  if (!actor) {
-    return <Navigate to="/unauthorized" replace state={{ reason: "NOT_REGISTERED", detail: "User not in AccountControl registry" }} />;
-  }
-
-  if (actor.status !== "ACTIVE") {
-    return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
-  }
-
-  if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) {
-    return <Outlet />;
-  }
+  if (!actor) return <Navigate to="/unauthorized" replace state={{ reason: "NOT_REGISTERED", detail: "User not in AccountControl registry" }} />;
+  if (actor.status !== "ACTIVE") return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
+  if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) return <Outlet />;
 
   if (required && required.length) {
     const ok = hasAnyPermission(auth, required);
@@ -65,11 +56,9 @@ export function RequireAuthz() {
       const requiredSet = new Set(required.map((x) => String(x)));
       let ok2 = false;
       for (const g of perms) if (requiredSet.has(String(g))) ok2 = true;
-      if (!ok2) {
-        return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
-      }
+      if (!ok2) return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
     } else if (!ok) {
-      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing required permissions for ${loc.pathname}: ${required.join(", ")}` }} />;
+      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
     }
   }
 

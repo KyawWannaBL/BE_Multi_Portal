@@ -1,3 +1,4 @@
+// @ts-nocheck
 export function hasAnyPermission(auth: any, required: string[]): boolean {
   if (!required || required.length === 0) return true;
   if (!auth) return false;

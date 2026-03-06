@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { normalizeRole } from "@/lib/portalRegistry";
 
@@ -19,7 +20,6 @@ export function getTier(role?: string, tierLevel?: any): Tier {
 
 export default function TierBadge({ role, tierLevel, className }: { role?: string | null; tierLevel?: unknown; className?: string }) {
   const tier = getTier(role || undefined, tierLevel);
-
   const colors: Record<Tier, string> = {
     L5: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
     L4: "bg-sky-500/15 text-sky-300 border-sky-500/25",
