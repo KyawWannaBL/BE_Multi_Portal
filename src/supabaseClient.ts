@@ -35,7 +35,6 @@ const hybridStorage = {
 };
 
 type StubError = { message: string; code?: string };
-
 function stubError(message = "Supabase is not configured."): StubError {
   return { message, code: "SUPABASE_NOT_CONFIGURED" };
 }
@@ -43,25 +42,17 @@ function stubError(message = "Supabase is not configured."): StubError {
 function stubQuery() {
   const chain: any = {};
   const ret = () => chain;
-
-  chain.select = ret;
-  chain.eq = ret;
-  chain.neq = ret;
-  chain.in = ret;
-  chain.order = ret;
-  chain.limit = ret;
+  chain.select = ret; chain.eq = ret; chain.neq = ret; chain.in = ret; chain.order = ret; chain.limit = ret;
   chain.maybeSingle = async () => ({ data: null, error: stubError() });
   chain.single = async () => ({ data: null, error: stubError() });
   chain.insert = async () => ({ data: null, error: stubError() });
   chain.update = async () => ({ data: null, error: stubError() });
   chain.delete = async () => ({ data: null, error: stubError() });
-
   return chain;
 }
 
 function createStubClient() {
   const noopSub = { unsubscribe: () => {} };
-
   return {
     auth: {
       getSession: async () => ({ data: { session: null }, error: stubError() }),
@@ -94,7 +85,3 @@ export const supabase: any = SUPABASE_CONFIGURED ? createClient(supabaseUrl, sup
     storage: hybridStorage as any,
   }
 }) : createStubClient();
-
-if (!SUPABASE_CONFIGURED) {
-  console.warn("[supabase] Missing VITE_SUPABASE_PROJECT_URL/VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
-}

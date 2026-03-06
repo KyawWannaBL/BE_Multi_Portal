@@ -17,7 +17,7 @@ export default function EnterprisePortal() {
   return (
     <div className="relative h-screen w-full overflow-hidden text-slate-100 bg-[#05080F]">
       {mounted && (
-        <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none">
+        <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none grayscale">
           <source src="/background.mp4" type="video/mp4" />
         </video>
       )}

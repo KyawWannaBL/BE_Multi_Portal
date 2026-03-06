@@ -14,6 +14,7 @@ import DashboardRedirect from "./pages/DashboardRedirect";
 
 import SuperAdminPortal from "./pages/portals/admin/SuperAdminPortal";
 import AdminModuleWrapper from "./pages/portals/admin/AdminModuleWrapper";
+import ExecutiveCommandCenter from "./pages/portals/admin/ExecutiveCommandCenter";
 
 import AccountControl from "./pages/AccountControl";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -66,6 +67,7 @@ export default function App() {
               <Route element={<RequireAuth />}>
                 {/* SUPER ADMIN PORTAL HUB */}
                 <Route path="/portal/admin" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><SuperAdminPortal /></RequireRole>} />
+                <Route path="/portal/admin/executive" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><ExecutiveCommandCenter /></RequireRole>} />
                 
                 <Route path="/portal/admin/accounts" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper></RequireRole>} />
                 <Route path="/portal/admin/dashboard" element={<RequireRole allow={["SYS", "APP_OWNER", "SUPER_ADMIN"]}><AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper></RequireRole>} />
