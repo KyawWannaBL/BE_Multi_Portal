@@ -1,35 +1,33 @@
-import React, { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { getCurrentIdentity } from "@/lib/appIdentity";
-import { portalPathForRole } from "@/lib/portalRouting";
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function DashboardRedirect() {
+  const { user, role, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function routeUser() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return navigate("/login", { replace: true });
-
-      const identity = await getCurrentIdentity();
-      const role =
-        identity?.primary_role ||
-        (session.user.app_metadata as any)?.role ||
-        (session.user.user_metadata as any)?.role ||
-        null;
-
-      navigate(portalPathForRole(role), { replace: true });
+    if (loading) return;
+    if (!user) {
+      navigate('/login', { replace: true });
+      return;
     }
-
-    void routeUser();
-  }, [navigate]);
+    
+    const r = (role || 'GUEST').toUpperCase();
+    if (["SUPER_ADMIN", "APP_OWNER", "SYS"].includes(r)) {
+        navigate("/portal/admin/executive", { replace: true });
+    } else if (r.includes("FINANCE")) {
+        navigate("/portal/finance", { replace: true });
+    } else if (["RIDER", "DRIVER", "HELPER"].includes(r)) {
+        navigate("/portal/execution", { replace: true });
+    } else {
+        navigate("/portal/operations", { replace: true });
+    }
+  }, [user, role, loading, navigate]);
 
   return (
-    <div className="h-screen bg-[#0B101B] flex items-center justify-center">
-      <div className="text-emerald-500 font-black animate-pulse uppercase tracking-[0.2em]">
-        Opening Britium Portal...
-      </div>
+    <div className="min-h-screen bg-[#05080F] flex items-center justify-center">
+      <div className="animate-pulse text-emerald-500 font-black uppercase tracking-widest text-xs">Routing to Secure Portal...</div>
     </div>
   );
 }
