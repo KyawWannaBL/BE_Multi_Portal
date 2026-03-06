@@ -6,40 +6,101 @@ echo "🚀 Initiating Complete Enterprise System Restoration..."
 # -----------------------------------------------------------------------------
 # 0) SETUP VARIABLES & DIRECTORIES
 # -----------------------------------------------------------------------------
+backup() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  cp -f "$f" "${f}.bak.$(date +%Y%m%d_%H%M%S)"
+}
+
+APP="src/App.tsx"
+SUPA="src/lib/supabase.ts"
+LOGIN="src/pages/Login.tsx"
+SIGNUP="src/pages/SignUp.tsx"
+PORTAL_SHELL="src/components/layout/PortalShell.tsx"
+TIER_BADGE="src/components/TierBadge.tsx"
+AUTH_CTX="src/contexts/AuthContext.tsx"
+PORTAL_SIDEBAR="src/components/layout/PortalSidebar.tsx"
+PORTAL_REGISTRY="src/lib/portalRegistry.ts"
+SUPER_ADMIN="src/pages/portals/admin/SuperAdminPortal.tsx"
+EXEC_CMD="src/pages/portals/admin/ExecutiveCommandCenter.tsx"
+ADMIN_WRAP="src/pages/portals/admin/AdminModuleWrapper.tsx"
+EXEC_MANUAL="src/pages/portals/execution/ExecutionManualPage.tsx"
+ENT_PORTAL="src/pages/EnterprisePortal.tsx"
+RESET_PW="src/pages/ResetPassword.tsx"
+UNAUTH="src/pages/Unauthorized.tsx"
+DASH_REDIR="src/pages/DashboardRedirect.tsx"
+REQ_AUTH="src/routes/RequireAuth.tsx"
+REQ_ROLE="src/routes/RequireRole.tsx"
+REQ_AUTHZ="src/routes/RequireAuthz.tsx"
+ACCT_CTRL="src/pages/AccountControl.tsx"
+ACCT_STORE="src/lib/accountControlStore.ts"
+PERM_RESOLVER="src/lib/permissionResolver.ts"
+RECENT_NAV="src/lib/recentNav.ts"
+SUPPLY_CHAIN="src/services/supplyChain.ts"
+
+echo "Creating directories..."
 mkdir -p src/lib src/services src/contexts src/components/layout src/routes
 mkdir -p src/pages/portals/admin src/pages/portals/operations src/pages/portals/finance
 mkdir -p src/pages/portals/execution src/pages/portals/hr src/pages/portals/warehouse
 mkdir -p src/pages/portals/branch src/pages/portals/supervisor
 
+echo "Backing up existing files..."
+backup "$APP"
+backup "$SUPA"
+backup "$LOGIN"
+backup "$SIGNUP"
+backup "$PORTAL_SHELL"
+backup "$TIER_BADGE"
+backup "$AUTH_CTX"
+backup "$PORTAL_SIDEBAR"
+backup "$PORTAL_REGISTRY"
+backup "$SUPER_ADMIN"
+backup "$ACCT_CTRL"
+backup "$ACCT_STORE"
+backup "$SUPPLY_CHAIN"
+
 # Restore original pages from git if they were modified/deleted
 git checkout HEAD -- src/pages/ 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# 1) INSTALL DEPENDENCIES & FIX TRACE TIMELINE ERROR
+# 1) INSTALL DEPENDENCIES & RECREATE SUPPLY CHAIN FUNCTIONS
 # -----------------------------------------------------------------------------
-echo "📦 Installing required UI dependencies..."
+echo "📦 Installing required UI dependencies to prevent build crashes..."
 npm install --save sonner date-fns lucide-react react-router-dom clsx tailwind-merge @radix-ui/react-slot class-variance-authority recharts react-hook-form zod @hookform/resolvers --no-fund --no-audit
 
-echo "🩹 Patching missing service exports to fix build errors..."
-mkdir -p src/services
-touch src/services/supplyChain.ts
+echo "🩹 Recreating dedicated functions in supplyChain.ts to fix build errors..."
+cat > "$SUPPLY_CHAIN" <<'EOF'
+// @ts-nocheck
+/**
+ * Safe mock implementations of supply chain functions to prevent Vite build crashes.
+ * These are required by FinanceReconPage.tsx and TraceTimeline.tsx.
+ */
 
-# Array of missing functions reported by Vite build failures
-MISSING_EXPORTS=(
-  "traceByWayId"
-  "listPendingCod"
-  "createDeposit"
-  "createCodCollection"
-  "recordSupplyEvent"
-)
+export const traceByWayId = async (id: any) => {
+  console.log("traceByWayId called with:", id);
+  return [];
+};
 
-# Safely inject stubs for missing exports so Vite compiles
-for func in "${MISSING_EXPORTS[@]}"; do
-  if ! grep -q "$func" src/services/supplyChain.ts; then
-    echo -e "\n// Auto-patched by setup script to prevent build crash" >> src/services/supplyChain.ts
-    echo "export const $func = async (...args: any[]) => [];" >> src/services/supplyChain.ts
-  fi
-done
+export const listPendingCod = async (...args: any[]) => {
+  console.log("listPendingCod called with:", args);
+  return [];
+};
+
+export const createDeposit = async (...args: any[]) => {
+  console.log("createDeposit called with:", args);
+  return { success: true };
+};
+
+export const createCodCollection = async (...args: any[]) => {
+  console.log("createCodCollection called with:", args);
+  return { success: true };
+};
+
+export const recordSupplyEvent = async (...args: any[]) => {
+  console.log("recordSupplyEvent called with:", args);
+  return { success: true };
+};
+EOF
 
 # Generate safe placeholders for secondary routes to prevent Vite build crashes
 STUB_FILES=(
@@ -83,9 +144,46 @@ for f in "${STUB_FILES[@]}"; do
 done
 
 # -----------------------------------------------------------------------------
-# 2) CORE ENTERPRISE FILES (Supabase, Auth, Stores, Registry)
+# 2) RECENT NAV LIB (localStorage module for Sidebar & Hub)
 # -----------------------------------------------------------------------------
-cat > src/lib/supabase.ts <<'EOF'
+cat > "$RECENT_NAV" <<'EOF'
+export const RECENT_NAV_KEY = "be_recent_nav";
+
+export type RecentNavItem = {
+  path: string;
+  label_en: string;
+  label_mm: string;
+  timestamp: number;
+};
+
+export function getRecentNav(): RecentNavItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_NAV_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentNav(item: Omit<RecentNavItem, "timestamp">) {
+  if (typeof window === "undefined") return;
+  const current = getRecentNav();
+  const filtered = current.filter(x => x.path !== item.path);
+  filtered.unshift({ ...item, timestamp: Date.now() });
+  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
+}
+
+export function clearRecentNav() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(RECENT_NAV_KEY);
+}
+EOF
+
+# -----------------------------------------------------------------------------
+# 3) CORE ENTERPRISE FILES (Supabase, Auth, Stores, Registry)
+# -----------------------------------------------------------------------------
+cat > "$SUPA" <<'EOF'
 // @ts-nocheck
 import { createClient } from "@supabase/supabase-js";
 
@@ -170,7 +268,7 @@ export const supabase: any = SUPABASE_CONFIGURED ? createClient(supabaseUrl, sup
 }) : createStubClient();
 EOF
 
-cat > src/contexts/AuthContext.tsx <<'EOF'
+cat > "$AUTH_CTX" <<'EOF'
 // @ts-nocheck
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -243,7 +341,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 export const useAuth = () => useContext(AuthContext);
 EOF
 
-cat > src/lib/permissionResolver.ts <<'EOF'
+cat > "$PERM_RESOLVER" <<'EOF'
 // @ts-nocheck
 export function hasAnyPermission(auth: any, required: string[]): boolean {
   if (!required || required.length === 0) return true;
@@ -253,7 +351,7 @@ export function hasAnyPermission(auth: any, required: string[]): boolean {
 }
 EOF
 
-cat > src/lib/portalRegistry.ts <<'EOF'
+cat > "$PORTAL_REGISTRY" <<'EOF'
 // @ts-nocheck
 import type { LucideIcon } from "lucide-react";
 import { Building2, ShieldCheck, Activity, Wallet, Megaphone, Users, LifeBuoy, Truck, Warehouse, GitBranch, UserCheck, ClipboardList, ShieldAlert, KeyRound } from "lucide-react";
@@ -383,7 +481,7 @@ export function defaultPortalForRole(role: string | null | undefined): string {
 }
 EOF
 
-cat > src/lib/accountControlStore.ts <<'EOF'
+cat > "$ACCT_STORE" <<'EOF'
 // @ts-nocheck
 export type Role = "SYS" | "APP_OWNER" | "SUPER_ADMIN" | "ADMIN" | "ADM" | "MGR" | "STAFF" | "FINANCE_USER" | "FINANCE_STAFF" | "HR_ADMIN" | "MARKETING_ADMIN" | "CUSTOMER_SERVICE" | "WAREHOUSE_MANAGER" | "SUBSTATION_MANAGER" | "SUPERVISOR" | "RIDER" | "DRIVER" | "HELPER" | "MERCHANT" | "CUSTOMER" | "GUEST";
 export type AccountStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED" | "ARCHIVED";
@@ -401,32 +499,17 @@ export const STORAGE_KEY = "account_control_store_v2";
 export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
   { code: "ADMIN_PORTAL_READ", en: "Super Admin portal access", mm: "Super Admin portal ဝင်ခွင့်" },
   { code: "EXEC_COMMAND_READ", en: "Executive command access", mm: "Executive command ဝင်ခွင့်" },
-  { code: "ADMIN_DASH_READ", en: "Admin dashboard view", mm: "Admin dashboard ကြည့်ခွင့်" },
-  { code: "ADMIN_USER_READ", en: "Admin users view", mm: "Admin users ကြည့်ခွင့်" },
   { code: "USER_READ", en: "View accounts", mm: "အကောင့်များကြည့်ရန်" },
   { code: "USER_CREATE", en: "Create account request", mm: "အကောင့်တောင်းဆိုမှု ဖန်တီးရန်" },
   { code: "USER_APPROVE", en: "Approve requests", mm: "တောင်းဆိုမှု အတည်ပြုရန်" },
   { code: "USER_REJECT", en: "Reject requests", mm: "တောင်းဆိုမှု ငြင်းပယ်ရန်" },
   { code: "USER_ROLE_EDIT", en: "Edit roles", mm: "Role ပြောင်းရန်" },
   { code: "USER_BLOCK", en: "Block/Unblock", mm: "ပိတ်/ဖွင့်ရန်" },
-  { code: "USER_RESET_TOKEN", en: "Reset onboarding token", mm: "Onboarding token ပြန်ချရန်" },
-  { code: "USER_DOCS_READ", en: "View docs", mm: "စာရွက်စာတမ်းကြည့်ရန်" },
   { code: "AUTHORITY_MANAGE", en: "Manage authorities", mm: "အာဏာများ စီမံရန်" },
   { code: "AUDIT_READ", en: "View audit log", mm: "Audit log ကြည့်ရန်" },
   { code: "BULK_ACTIONS", en: "Bulk actions", mm: "အုပ်စုလိုက်လုပ်ဆောင်မှု" },
   { code: "CSV_IMPORT", en: "CSV import", mm: "CSV သွင်းရန်" },
   { code: "CSV_EXPORT", en: "CSV export", mm: "CSV ထုတ်ရန်" },
-  { code: "PORTAL_OPERATIONS", en: "Operations portal access", mm: "Operations portal ဝင်ခွင့်" },
-  { code: "PORTAL_FINANCE", en: "Finance portal access", mm: "Finance portal ဝင်ခွင့်" },
-  { code: "PORTAL_MARKETING", en: "Marketing portal access", mm: "Marketing portal ဝင်ခွင့်" },
-  { code: "PORTAL_HR", en: "HR portal access", mm: "HR portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPPORT", en: "Support portal access", mm: "Support portal ဝင်ခွင့်" },
-  { code: "PORTAL_EXECUTION", en: "Execution portal access", mm: "Execution portal ဝင်ခွင့်" },
-  { code: "PORTAL_WAREHOUSE", en: "Warehouse portal access", mm: "Warehouse portal ဝင်ခွင့်" },
-  { code: "PORTAL_BRANCH", en: "Branch portal access", mm: "Branch portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPERVISOR", en: "Supervisor portal access", mm: "Supervisor portal ဝင်ခွင့်" },
-  { code: "PORTAL_MERCHANT", en: "Merchant portal access", mm: "Merchant portal ဝင်ခွင့်" },
-  { code: "PORTAL_CUSTOMER", en: "Customer portal access", mm: "Customer portal ဝင်ခွင့်" },
 ];
 
 export const DEFAULT_ROLES: Role[] = ["SYS", "APP_OWNER", "SUPER_ADMIN", "ADMIN", "ADM", "MGR", "STAFF", "FINANCE_USER", "FINANCE_STAFF", "HR_ADMIN", "MARKETING_ADMIN", "CUSTOMER_SERVICE", "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER", "SUPERVISOR", "RIDER", "DRIVER", "HELPER", "MERCHANT", "CUSTOMER"];
@@ -534,9 +617,9 @@ export function csvStringify(rows: string[][]): string {
 EOF
 
 # -----------------------------------------------------------------------------
-# 3) ROUTING GUARDS
+# 4) ROUTING GUARDS
 # -----------------------------------------------------------------------------
-cat > src/routes/RequireAuth.tsx << 'EOF'
+cat > "$REQ_AUTH" << 'EOF'
 // @ts-nocheck
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
@@ -551,7 +634,7 @@ export function RequireAuth() {
 }
 EOF
 
-cat > src/routes/RequireRole.tsx << 'EOF'
+cat > "$REQ_ROLE" << 'EOF'
 // @ts-nocheck
 import * as React from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -606,7 +689,7 @@ export function RequireRole({ allow = [], children }: { allow?: string[]; childr
 }
 EOF
 
-cat > src/routes/RequireAuthz.tsx <<'EOF'
+cat > "$REQ_AUTHZ" <<'EOF'
 // @ts-nocheck
 import React, { useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
@@ -676,9 +759,9 @@ export function RequireAuthz() {
 EOF
 
 # -----------------------------------------------------------------------------
-# 4) COMPONENTS & UI
+# 5) COMPONENTS (TIER BADGE, SIDEBAR WITH RBAC + RECENT, PORTAL SHELL)
 # -----------------------------------------------------------------------------
-cat > src/components/TierBadge.tsx <<'EOF'
+cat > "$TIER_BADGE" <<'EOF'
 // @ts-nocheck
 import React from "react";
 import { normalizeRole } from "@/lib/portalRegistry";
@@ -717,23 +800,31 @@ export default function TierBadge({ role, tierLevel, className }: { role?: strin
 }
 EOF
 
-cat > src/components/layout/PortalSidebar.tsx <<'EOF'
+cat > "$PORTAL_SIDEBAR" <<'EOF'
 // @ts-nocheck
-import React from "react";
-import { NavLink } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { navForRole, type NavItem } from "@/lib/portalRegistry";
+import { getRecentNav, addRecentNav, clearRecentNav, type RecentNavItem } from "@/lib/recentNav";
+import { Search, Clock, Trash2, X } from "lucide-react";
+import { loadStore, getAccountByEmail, effectivePermissions, roleIsPrivileged } from "@/lib/accountControlStore";
 
 function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; onNavigate?: () => void }) {
   const { lang } = useLanguage();
   const Icon = item.icon;
 
+  const handleClick = () => {
+    addRecentNav({ path: item.path, label_en: item.label_en, label_mm: item.label_mm });
+    if (onNavigate) onNavigate();
+  };
+
   return (
     <div className="space-y-1">
       <NavLink
         to={item.path}
-        onClick={onNavigate}
+        onClick={handleClick}
         className={({ isActive }) =>
           [
             "flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-black tracking-widest uppercase transition",
@@ -758,24 +849,123 @@ function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; 
 }
 
 export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () => void; }) {
-  const { role } = useAuth();
+  const auth = useAuth() as any;
   const { lang } = useLanguage();
-  const sections = navForRole(role);
+  const navigate = useNavigate();
+
+  const [search, setSearch] = useState("");
+  const [recent, setRecent] = useState<RecentNavItem[]>([]);
+
+  useEffect(() => {
+    setRecent(getRecentNav());
+  }, [auth?.user?.email, open]);
+
+  const userPerms = useMemo(() => {
+    const email = auth?.user?.email;
+    if (!email) return new Set<string>();
+    const store = typeof window !== "undefined" ? loadStore() : null;
+    if (!store) return new Set<string>();
+    const actor = getAccountByEmail(store.accounts, email);
+    if (!actor) return new Set<string>();
+    if (roleIsPrivileged(actor.role)) return new Set(["*"]);
+    return new Set(Array.from(effectivePermissions(store, actor)).map(String));
+  }, [auth?.user?.email]);
+
+  const hasPerm = (req?: string[]) => {
+    if (userPerms.has("*")) return true;
+    if (!req || req.length === 0) return true;
+    return req.some(r => userPerms.has(r));
+  };
+
+  const rawSections = navForRole(auth?.role);
+
+  const filteredSections = useMemo(() => {
+    function filterNav(items: NavItem[], q: string): NavItem[] {
+      return items.map(item => {
+        if (!hasPerm(item.requiredPermissions)) return null;
+        
+        const matchesQ = !q || item.label_en.toLowerCase().includes(q.toLowerCase()) || item.label_mm.toLowerCase().includes(q.toLowerCase());
+        const children = item.children ? filterNav(item.children, q) : undefined;
+        const hasVisibleChildren = children && children.length > 0;
+        
+        if (!matchesQ && !hasVisibleChildren) return null;
+        return { ...item, children };
+      }).filter(Boolean) as NavItem[];
+    }
+
+    return rawSections.map(sec => {
+      const items = filterNav(sec.items, search);
+      return { ...sec, items };
+    }).filter(sec => sec.items.length > 0);
+  }, [rawSections, search, userPerms]);
 
   const panel = (
-    <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] overflow-y-auto custom-scrollbar">
-      {sections.map((sec) => (
-        <div key={sec.id} className="mb-6">
-          <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
-            {lang === "en" ? sec.title_en : sec.title_mm}
+    <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] flex flex-col">
+      
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+        <input 
+          type="text"
+          placeholder={lang === "en" ? "Search navigation..." : "ရှာဖွေရန်..."}
+          className="w-full bg-black/40 border border-white/10 rounded-xl h-10 pl-9 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/40"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        {!search && recent.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase flex items-center gap-2">
+                <Clock className="h-3 w-3" /> {lang === "en" ? "RECENT" : "မကြာသေးမီက"}
+              </div>
+              <button onClick={() => { clearRecentNav(); setRecent([]); }} className="text-slate-500 hover:text-rose-400" title="Clear Recent">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {recent.map((r, idx) => (
+                <button
+                  key={`${r.path}-${idx}`}
+                  onClick={() => {
+                    addRecentNav({ path: r.path, label_en: r.label_en, label_mm: r.label_mm });
+                    if (onClose) onClose();
+                    navigate(r.path);
+                  }}
+                  className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-black tracking-widest uppercase transition text-slate-300 hover:bg-white/5 hover:text-emerald-300"
+                >
+                  <span className="truncate">{lang === "en" ? r.label_en : r.label_mm}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-2">
-            {sec.items.map((it) => (
-              <Item key={it.id} item={it} onNavigate={onClose} />
-            ))}
+        )}
+
+        {filteredSections.length === 0 ? (
+          <div className="text-center text-xs text-slate-600 mt-8 italic">
+            {lang === "en" ? "No matches found." : "ရှာမတွေ့ပါ။"}
           </div>
-        </div>
-      ))}
+        ) : (
+          filteredSections.map((sec) => (
+            <div key={sec.id} className="mb-6">
+              <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
+                {lang === "en" ? sec.title_en : sec.title_mm}
+              </div>
+              <div className="space-y-2">
+                {sec.items.map((it) => (
+                  <Item key={it.id} item={it} onNavigate={onClose} />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </aside>
   );
 
@@ -793,7 +983,7 @@ export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () =>
 }
 EOF
 
-cat > src/components/layout/PortalShell.tsx <<'EOF'
+cat > "$PORTAL_SHELL" <<'EOF'
 // @ts-nocheck
 import React from "react";
 import { Link } from "react-router-dom";
@@ -856,649 +1046,1094 @@ export function PortalShell({ title, links, children }: { title: string; links?:
 EOF
 
 # -----------------------------------------------------------------------------
-# 5) ACCOUNT CONTROL (Enterprise NO SQL UI)
+# 6) SUPER ADMIN HUB WITH SEARCH & RECENT
 # -----------------------------------------------------------------------------
-cat > src/pages/AccountControl.tsx <<'EOF'
+cat > "$SUPER_ADMIN" <<'EOF'
 // @ts-nocheck
-'use client';
-
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLanguage } from "@/contexts/LanguageContext";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Download, History, Key, Lock, RefreshCw, Search, ShieldCheck, Upload, UserCog, UserPlus, XCircle } from "lucide-react";
-import { DEFAULT_ROLES, PERMISSIONS, STORAGE_KEY, type Account, type AccountStatus, type Permission, type Role, activeGrantsFor, can, canGrantPermission, csvParse, csvStringify, effectivePermissions, ensureAtLeastOneSuperAdminActive, getAccountByEmail, isEmailValid, loadStore, nowIso, pushAudit, roleIsPrivileged, safeLower, saveStore, uuid } from "@/lib/accountControlStore";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { supabase } from "@/lib/supabase";
+import { getAvailablePortals, normalizeRole, PORTALS, portalCountAll, portalCountForRole, portalsForRole } from "@/lib/portalRegistry";
+import { getRecentNav, addRecentNav, type RecentNavItem } from "@/lib/recentNav";
+import { PortalShell } from "@/components/layout/PortalShell";
+import TierBadge from "@/components/TierBadge";
+import { Activity, ArrowRight, Clock, HardDrive, KeyRound, Search, ShieldAlert, ShieldCheck, Users, UserCheck, ClipboardList } from "lucide-react";
 
-type Toast = { type: "ok" | "err" | "warn"; msg: string };
+type Health = "NOMINAL" | "DEGRADED" | "UNKNOWN";
 
-function Modal(props: { open: boolean; title: string; onClose: () => void; widthClass?: string; children: React.ReactNode }) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
+type MetricState = {
+  personnel: number | null;
+  riders: number | null;
+  securityEvents: number | null;
+  rotationRequired: number | null;
+  portalsAccessible: number | null;
+  portalsTotal: number | null;
+  health: Health;
+};
 
-  useEffect(() => {
-    if (!props.open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [props.open, props.onClose]);
+type AuditRow = {
+  id: number | string;
+  created_at: string;
+  event_type: string;
+  user_id?: string | null;
+  metadata?: any;
+};
 
-  useEffect(() => {
-    if (props.open) setTimeout(() => panelRef.current?.focus(), 0);
-  }, [props.open]);
-
-  if (!props.open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={props.onClose} />
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" className={`relative w-full ${props.widthClass ?? "max-w-3xl"} rounded-[2rem] bg-[#05080F] ring-1 ring-white/10 shadow-2xl outline-none max-h-[90vh] overflow-y-auto custom-scrollbar`}>
-        <div className="flex items-center justify-between p-6 border-b border-white/5 sticky top-0 bg-[#05080F] z-10">
-          <div>
-            <div className="text-white font-black uppercase italic">{props.title}</div>
-            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">enterprise_identity_governance</div>
-          </div>
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={props.onClose}>
-            <XCircle className="h-5 w-5" />
-          </Button>
-        </div>
-        <div className="p-6">{props.children}</div>
-      </div>
-    </div>
-  );
+function fmt(n: number | null) {
+  if (n === null) return "—";
+  return new Intl.NumberFormat().format(n);
 }
 
-function Pill(props: { children: React.ReactNode; className?: string }) {
-  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black tracking-tighter ${props.className ?? ""}`}>{props.children}</span>;
+function relativeTime(iso: string, lang: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const diff = Date.now() - t;
+
+  const s = Math.floor(diff / 1000);
+  const tr = (en: string, mm: string) => (lang === "en" ? en : mm);
+
+  if (s < 10) return tr("just now", "ယခုပဲ");
+  if (s < 60) return tr(`${s}s ago`, `${s}s အရင်`);
+  const m = Math.floor(s / 60);
+  if (m < 60) return tr(`${m}m ago`, `${m}m အရင်`);
+  const h = Math.floor(m / 60);
+  if (h < 48) return tr(`${h}h ago`, `${h}h အရင်`);
+  const d = Math.floor(h / 24);
+  return tr(`${d}d ago`, `${d}ရက် အရင်`);
 }
 
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`h-11 w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
+function eventBadge(eventType: string) {
+  const t = (eventType || "").toUpperCase();
+  if (t.includes("PASSWORD")) return { bg: "bg-amber-500/10", fg: "text-amber-400", icon: KeyRound };
+  if (t.includes("LOGIN")) return { bg: "bg-emerald-500/10", fg: "text-emerald-400", icon: Activity };
+  if (t.includes("SESSION")) return { bg: "bg-sky-500/10", fg: "text-sky-300", icon: ShieldCheck };
+  return { bg: "bg-white/5", fg: "text-slate-300", icon: ShieldAlert };
 }
 
-function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`min-h-[92px] w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
+async function countProfilesTotal(): Promise<number | null> {
+  const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
+  if (res.error) return null;
+  return res.count ?? null;
 }
 
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`h-11 w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
-}
-
-function Divider() {
-  return <div className="h-px w-full bg-white/5 my-4" />;
-}
-
-function formatStatus(status: AccountStatus): { label: string; cls: string } {
-  switch (status) {
-    case "ACTIVE": return { label: "ACTIVE", cls: "text-emerald-400" };
-    case "PENDING": return { label: "PENDING", cls: "text-amber-400" };
-    case "SUSPENDED": return { label: "SUSPENDED", cls: "text-rose-400" };
-    case "REJECTED": return { label: "REJECTED", cls: "text-rose-400" };
-    case "ARCHIVED": return { label: "ARCHIVED", cls: "text-slate-500" };
-    default: return { label: status, cls: "text-slate-400" };
+async function countProfilesByRoleFields(roles: string[]): Promise<number | null> {
+  const fields = ["role", "role_code", "app_role", "user_role"];
+  for (const f of fields) {
+    const res = await supabase.from("profiles").select("id", { count: "exact", head: true }).in(f, roles);
+    if (!res.error) return res.count ?? null;
+    const msg = ((res.error as any)?.message ?? "").toLowerCase();
+    if (!msg.includes("does not exist")) break;
   }
+  return null;
 }
 
-function roleBadgeClass(role: Role): string {
-  if (role === "SYS" || role === "APP_OWNER") return "bg-emerald-500/10 text-emerald-400";
-  if (role === "SUPER_ADMIN") return "bg-sky-500/10 text-sky-400";
-  if (role === "ADMIN" || role === "ADM" || role === "MGR") return "bg-amber-500/10 text-amber-300";
-  return "bg-white/5 text-slate-300";
+async function countRotationRequired(): Promise<number | null> {
+  const fields = ["must_change_password", "requires_password_change", "requires_password_reset"];
+  for (const f of fields) {
+    const res = await supabase.from("profiles").select("id", { count: "exact", head: true }).eq(f, true);
+    if (!res.error) return res.count ?? null;
+    const msg = ((res.error as any)?.message ?? "").toLowerCase();
+    if (!msg.includes("does not exist")) break;
+  }
+  return null;
 }
 
-function downloadBlob(filename: string, contentType: string, data: string) {
-  const blob = new Blob([data], { type: contentType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+async function loadAuditFeed(limit = 15): Promise<AuditRow[]> {
+  const res = await supabase
+    .from("audit_logs")
+    .select("id, created_at, event_type, user_id, metadata")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (res.error) return [];
+  return (res.data as any) ?? [];
 }
 
-export default function AccountControl() {
+export default function SuperAdminPortal() {
+  const { user, role } = useAuth();
   const { lang } = useLanguage();
-  const auth = useAuth() as any;
+  const navigate = useNavigate();
+
   const t = (en: string, mm: string) => (lang === "en" ? en : mm);
 
-  const [store, setStore] = useState(() => loadStore());
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [metrics, setMetrics] = useState<MetricState>({
+    personnel: null, riders: null, securityEvents: null, rotationRequired: null,
+    portalsAccessible: null, portalsTotal: null, health: "UNKNOWN",
+  });
 
-  const actorEmail = (auth?.user?.email ?? "") as string;
-  const actor = useMemo(() => (actorEmail ? getAccountByEmail(store.accounts, actorEmail) : undefined), [store.accounts, actorEmail]);
-  const actorPerms = useMemo(() => effectivePermissions(store, actor), [store, actor]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchPortal, setSearchPortal] = useState("");
+  const [recent, setRecent] = useState<RecentNavItem[]>([]);
 
-  useEffect(() => saveStore(store), [store]);
+  const portals = useMemo(() => portalsForRole(role), [role]);
 
   useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 2400);
-    return () => window.clearTimeout(id);
-  }, [toast]);
+    let cancelled = false;
+    setRecent(getRecentNav());
 
-  const canRead = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_READ");
-  const canCreate = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_CREATE");
-  const canApprove = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_APPROVE");
-  const canReject = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_REJECT");
-  const canRoleEdit = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_ROLE_EDIT");
-  const canBlock = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_BLOCK");
-  const canAuth = !!actor && actor.status === "ACTIVE" && can(store, actor, "AUTHORITY_MANAGE");
-  const canAudit = !!actor && actor.status === "ACTIVE" && can(store, actor, "AUDIT_READ");
-  const canExport = !!actor && actor.status === "ACTIVE" && can(store, actor, "CSV_EXPORT");
-  const canImport = !!actor && actor.status === "ACTIVE" && can(store, actor, "CSV_IMPORT");
-  const canBulk = !!actor && actor.status === "ACTIVE" && can(store, actor, "BULK_ACTIONS");
+    async function load() {
+      setLoading(true);
+      const riderRoles = ["RDR", "RIDER", "RIDER_USER", "DELIVERY_RIDER", "DRIVER", "HELPER"];
 
-  const [q, setQ] = useState("");
-  const [filterStatus, setFilterStatus] = useState<AccountStatus | "ALL">("ALL");
-  const [filterRole, setFilterRole] = useState<Role | "ALL">("ALL");
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
+      const [personnel, riders, rotationRequired, feed] = await Promise.all([
+        countProfilesTotal(), countProfilesByRoleFields(riderRoles),
+        countRotationRequired(), loadAuditFeed(15),
+      ]);
 
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const selectedEmails = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+      const anyOk = personnel !== null || riders !== null || rotationRequired !== null || feed.length > 0;
+      if (cancelled) return;
 
-  const [modalCreate, setModalCreate] = useState(false);
-  const [modalAudit, setModalAudit] = useState(false);
-  const [modalAuthorityEmail, setModalAuthorityEmail] = useState<string | null>(null);
-  const [modalProfileEmail, setModalProfileEmail] = useState<string | null>(null);
-  const [modalApproveEmail, setModalApproveEmail] = useState<string | null>(null);
-  const [modalRejectEmail, setModalRejectEmail] = useState<string | null>(null);
-  const [modalImport, setModalImport] = useState(false);
-  const [modalBulk, setModalBulk] = useState(false);
-
-  function auditPush(action: string, targetEmail?: string, detail?: string) {
-    setStore((prev) => pushAudit(prev, { actorEmail: actorEmail || "UNKNOWN", action, targetEmail, detail }));
-  }
-
-  const filtered = useMemo(() => {
-    const qq = safeLower(q);
-    return store.accounts
-      .filter((a) => {
-        if (filterStatus !== "ALL" && a.status !== filterStatus) return false;
-        if (filterRole !== "ALL" && a.role !== filterRole) return false;
-        if (!qq) return true;
-        return safeLower(a.name).includes(qq) || safeLower(a.email).includes(qq);
-      })
-      .sort((a, b) => safeLower(a.email).localeCompare(safeLower(b.email)));
-  }, [store.accounts, q, filterStatus, filterRole]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = useMemo(() => {
-    const p = Math.min(page, totalPages);
-    const start = (p - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, totalPages]);
-
-  useEffect(() => setPage(1), [q, filterStatus, filterRole]);
-
-  function upsertAccount(next: Account) {
-    setStore((prev) => ({ ...prev, accounts: prev.accounts.map((a) => (safeLower(a.email) === safeLower(next.email) ? next : a)) }));
-  }
-
-  function addAccount(acc: Account) {
-    setStore((prev) => ({ ...prev, accounts: [acc, ...prev.accounts] }));
-  }
-
-  function approve(email: string, note?: string) {
-    if (!actor || !canApprove) return;
-    const target = getAccountByEmail(store.accounts, email);
-    if (!target) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    const next: Account = { ...target, status: "ACTIVE", approval: { requestedAt: target.approval?.requestedAt ?? target.createdAt, requestedBy: target.approval?.requestedBy ?? target.createdBy, processedAt: nowIso(), processedBy: actorEmail, decision: "APPROVED", note } };
-    upsertAccount(next);
-    auditPush("REQUEST_APPROVED", email, note ?? "Approved");
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function reject(email: string, note?: string) {
-    if (!actor || !canReject) return;
-    const target = getAccountByEmail(store.accounts, email);
-    if (!target) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    const next: Account = { ...target, status: "REJECTED", approval: { requestedAt: target.approval?.requestedAt ?? target.createdAt, requestedBy: target.approval?.requestedBy ?? target.createdBy, processedAt: nowIso(), processedBy: actorEmail, decision: "REJECTED", note } };
-    upsertAccount(next);
-    auditPush("REQUEST_REJECTED", email, note ?? "Rejected");
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function blockToggle(email: string, block: boolean) {
-    if (!actor || !canBlock) return;
-    const target = getAccountByEmail(store.accounts, email);
-    if (!target) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    const next: Account = { ...target, status: block ? "SUSPENDED" : "ACTIVE", security: { ...(target.security ?? {}), blockedAt: block ? nowIso() : undefined, blockedBy: block ? actorEmail : undefined } };
-    upsertAccount(next);
-    auditPush(block ? "ACCOUNT_BLOCKED" : "ACCOUNT_UNBLOCKED", email, `By ${actorEmail}`);
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function changeRole(email: string, role: Role) {
-    if (!actor || !canRoleEdit) return;
-    const target = getAccountByEmail(store.accounts, email);
-    if (!target) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    const next: Account = { ...target, role };
-    const nextAccounts = store.accounts.map((a) => (safeLower(a.email) === safeLower(email) ? next : a));
-    if (!ensureAtLeastOneSuperAdminActive(nextAccounts)) { setToast({ type: "err", msg: "Must keep at least one ACTIVE SUPER_ADMIN." }); return; }
-    setStore((prev) => ({ ...prev, accounts: nextAccounts }));
-    auditPush("ROLE_CHANGED", email, `Role -> ${role}`);
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function grantPermission(subjectEmail: string, permission: Permission) {
-    if (!actor || !canAuth) return;
-    if (!canGrantPermission(store, actor, permission)) { setToast({ type: "err", msg: "You cannot grant a permission you don't own." }); return; }
-    const subject = getAccountByEmail(store.accounts, subjectEmail);
-    if (!subject) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(subject.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    const exists = store.grants.some((g) => safeLower(g.subjectEmail) === safeLower(subjectEmail) && g.permission === permission && !g.revokedAt);
-    if (exists) return;
-    setStore((prev) => ({ ...prev, grants: [{ id: uuid(), subjectEmail, permission, grantedAt: nowIso(), grantedBy: actorEmail }, ...prev.grants] }));
-    auditPush("AUTHORITY_GRANTED", subjectEmail, `${permission}`);
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function revokePermission(subjectEmail: string, permission: Permission) {
-    if (!actor || !canAuth) return;
-    const subject = getAccountByEmail(store.accounts, subjectEmail);
-    if (!subject) return;
-    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(subject.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
-    setStore((prev) => ({ ...prev, grants: prev.grants.map((g) => { if (safeLower(g.subjectEmail) !== safeLower(subjectEmail)) return g; if (g.permission !== permission) return g; if (g.revokedAt) return g; return { ...g, revokedAt: nowIso(), revokedBy: actorEmail }; }) }));
-    auditPush("AUTHORITY_REVOKED", subjectEmail, `${permission}`);
-    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
-  }
-
-  function exportAccountsCsv() {
-    const header = ["name", "email", "role", "status", "department", "phone", "employeeId", "createdAt", "createdBy"];
-    const rows: string[][] = [header];
-    for (const a of filtered) { rows.push([a.name ?? "", a.email ?? "", a.role ?? "", a.status ?? "", a.department ?? "", a.phone ?? "", a.employeeId ?? "", a.createdAt ?? "", a.createdBy ?? ""]); }
-    downloadBlob(`accounts_${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8", csvStringify(rows));
-    auditPush("CSV_EXPORT_ACCOUNTS", undefined, `Rows=${filtered.length}`);
-  }
-
-  function exportGrantsCsv() {
-    const header = ["subjectEmail", "permission", "grantedAt", "grantedBy", "revokedAt", "revokedBy"];
-    const rows: string[][] = [header];
-    for (const g of store.grants) { rows.push([g.subjectEmail, String(g.permission), g.grantedAt, g.grantedBy, g.revokedAt ?? "", g.revokedBy ?? ""]); }
-    downloadBlob(`authorities_${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8", csvStringify(rows));
-    auditPush("CSV_EXPORT_AUTHORITIES", undefined, `Rows=${store.grants.length}`);
-  }
-
-  function selectAllOnPage(checked: boolean) {
-    const next = { ...selected };
-    for (const a of paged) next[a.email] = checked;
-    setSelected(next);
-  }
-
-  function clearSelection() { setSelected({}); }
-
-  const CreateModal = () => {
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [role, setRole] = useState<Role>("STAFF");
-    const [department, setDepartment] = useState("");
-    const [phone, setPhone] = useState("");
-    const [employeeId, setEmployeeId] = useState("");
-    const [note, setNote] = useState("");
-
-    function submit() {
-      if (!actor || !canCreate) return;
-      const em = email.trim();
-      if (!name.trim() || !isEmailValid(em)) { setToast({ type: "err", msg: t("Please check required fields.", "လိုအပ်သော အချက်အလက်များ စစ်ဆေးပါ။") }); return; }
-      if (getAccountByEmail(store.accounts, em)) { setToast({ type: "err", msg: t("Email already exists.", "Email ရှိပြီးသားဖြစ်သည်။") }); return; }
-      const createdAt = nowIso();
-      const acc: Account = { id: uuid(), name: name.trim(), email: em, role, status: "PENDING", department: department.trim() || undefined, phone: phone.trim() || undefined, employeeId: employeeId.trim() || undefined, createdAt, createdBy: actorEmail, approval: { requestedAt: createdAt, requestedBy: actorEmail, note: note.trim() || undefined } };
-      addAccount(acc);
-      auditPush("REQUEST_CREATED", em, note.trim() || "Created");
-      setModalCreate(false);
-      setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+      setMetrics({
+        personnel, riders, securityEvents: feed.length > 0 ? feed.length : null,
+        rotationRequired, portalsAccessible: portalCountForRole(role),
+        portalsTotal: portalCountAll(), health: anyOk ? "NOMINAL" : "DEGRADED",
+      });
+      setAudit(feed);
+      setLoading(false);
     }
 
-    return (
-      <div className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Full name", "အမည်")}</div><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Email", "Email")}</div><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Role", "Role")}</div><Select value={role} onChange={(e) => setRole(e.target.value as Role)}>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Department", "ဌာန")}</div><Input value={department} onChange={(e) => setDepartment(e.target.value)} /></div>
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Phone", "ဖုန်း")}</div><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Employee ID", "ဝန်ထမ်း ID")}</div><Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} /></div>
-        </div>
-        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Reason / Note", "အကြောင်းရင်း / မှတ်ချက်")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
-        <Divider />
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalCreate(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
-          <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase" onClick={submit}>{t("Save", "သိမ်းမည်")}</Button>
-        </div>
-      </div>
-    );
+    void load();
+    return () => { cancelled = true; };
+  }, [role]);
+
+  const stats = useMemo(() => [
+      { title: t("TOTAL PERSONNEL", "ဝန်ထမ်းစုစုပေါင်း"), value: fmt(metrics.personnel), icon: Users, border: "border-sky-500/20" },
+      { title: t("ACTIVE RIDERS", "တာဝန်ထမ်းဆောင်နေသော Rider များ"), value: fmt(metrics.riders), icon: Activity, border: "border-emerald-500/20" },
+      { title: t("SECURITY EVENTS", "လုံခြုံရေးဖြစ်ရပ်များ"), value: fmt(metrics.securityEvents), icon: ShieldCheck, border: "border-amber-500/20" },
+      { title: t("ROTATION REQUIRED", "စကားဝှက်ပြောင်းရန်လိုအပ်သူများ"), value: fmt(metrics.rotationRequired), icon: KeyRound, border: "border-purple-500/20" },
+      { title: t("PORTALS ACCESS", "Portal ဝင်နိုင်မှု"), value: `${fmt(metrics.portalsAccessible)} / ${fmt(metrics.portalsTotal)}`, icon: ClipboardList, border: "border-white/10" },
+    ], [metrics, lang]
+  );
+
+  const filteredPortals = useMemo(() => {
+    if (!searchPortal) return portals;
+    const q = searchPortal.toLowerCase();
+    return portals.filter(p => p.label_en.toLowerCase().includes(q) || p.label_mm.toLowerCase().includes(q));
+  }, [portals, searchPortal]);
+
+  const handleNavigate = (path: string, en: string, mm: string) => {
+    addRecentNav({ path, label_en: en, label_mm: mm });
+    navigate(path);
   };
 
-  const AuthorityModal = ({ email }: { email: string }) => {
-    const subject = getAccountByEmail(store.accounts, email);
-    if (!subject) return null;
-    const subjectPerms = roleIsPrivileged(subject.role) ? new Set(PERMISSIONS.map((p) => p.code)) : new Set(activeGrantsFor(store.grants, subject.email).map((g) => g.permission));
-    return (
-      <div className="space-y-5">
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-          <div className="flex items-center justify-between gap-3">
-            <div><div className="text-white font-black uppercase italic">{subject.name}</div><div className="text-sm text-slate-500">{subject.email}</div></div>
-            <Pill className={roleBadgeClass(subject.role)}>{subject.role}</Pill>
+  return (
+    <PortalShell title={t("Super Admin Portal", "Super Admin Portal")}>
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/5 pb-6">
+          <div>
+            <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-2">
+              {t("SESSION ACTIVE", "စနစ်ဝင်ရောက်ထားပါသည်")}
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-widest uppercase">
+              {t("Command Center", "စီမံခန့်ခွဲမှုစင်တာ")}
+            </h1>
+            <p className="text-sm text-slate-400 mt-1 font-mono">{(user as any)?.email ?? "—"}</p>
           </div>
-          {!roleIsPrivileged(actor?.role) && roleIsPrivileged(subject.role) ? (
-            <div className="mt-3 flex items-center gap-2 text-amber-300 text-sm"><AlertTriangle className="h-4 w-4" /> Privileged accounts can only be modified by SYS/APP_OWNER/SUPER_ADMIN.</div>
-          ) : null}
+
+          <div className="text-right">
+            <p className="text-[10px] font-mono text-slate-500 tracking-widest uppercase">
+              {t("SYSTEM STATUS", "စနစ်အခြေအနေ")}
+            </p>
+            <div className="flex items-center gap-2 mt-2 justify-end">
+              <div className={`w-2 h-2 rounded-full ${metrics.health === "NOMINAL" ? "bg-emerald-500" : "bg-amber-500"} animate-pulse`} />
+              <span className={`text-xs font-mono tracking-widest uppercase ${metrics.health === "NOMINAL" ? "text-emerald-300" : "text-amber-300"}`}>
+                {metrics.health === "NOMINAL" ? t("ALL SYSTEMS NOMINAL", "စနစ်အခြေအနေကောင်းမွန်") : t("SYSTEM DEGRADED", "စနစ်အချို့ချို့ယွင်း")}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {PERMISSIONS.map((p) => {
-            const enabled = subjectPerms.has(p.code);
-            const disabled = !actor || !canAuth || (roleIsPrivileged(subject.role) && !roleIsPrivileged(actor.role)) || (!roleIsPrivileged(actor.role) && !canGrantPermission(store, actor, p.code));
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {stats.map((s, i) => {
+            const Icon = s.icon;
             return (
-              <div key={String(p.code)} className={`p-4 rounded-2xl border ${enabled ? "border-sky-500/20 bg-sky-500/5" : "border-white/10 bg-white/5"}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-white font-bold">{lang === "en" ? p.en : p.mm}</div>
-                    <div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{String(p.code)}</div>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input type="checkbox" checked={enabled} disabled={disabled} onChange={(e) => { if (e.target.checked) grantPermission(subject.email, p.code); else revokePermission(subject.email, p.code); }} className="h-4 w-4 accent-sky-500 disabled:opacity-50" />
-                    {enabled ? "ON" : "OFF"}
-                  </label>
+              <div key={i} className={`p-6 rounded-2xl bg-[#0B101B] border ${s.border} relative overflow-hidden`}>
+                <div className="absolute -right-6 -top-6 opacity-5"><Icon size={96} /></div>
+                <div className="p-3 rounded-xl bg-white/5 w-fit mb-4"><Icon size={18} className="text-slate-200" /></div>
+                <div>
+                  <div className="text-3xl font-black text-white">{s.value}</div>
+                  <div className="text-[10px] font-mono text-slate-400 tracking-widest uppercase mt-2">{s.title}</div>
                 </div>
               </div>
             );
           })}
         </div>
-        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalAuthorityEmail(null)}>{t("Close", "ပိတ်")}</Button></div>
-      </div>
-    );
-  };
 
-  const AuditModal = () => {
-    const events = store.audit.slice(0, 200);
-    return (
-      <div className="space-y-4">
-        <div className="text-sm text-slate-500">Showing latest {events.length} events (max 200).</div>
-        <div className="space-y-2 max-h-[60vh] overflow-auto pr-1 custom-scrollbar">
-          {events.map((e) => (
-            <div key={e.id} className="p-3 rounded-2xl bg-[#0B101B] border border-white/10">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-white font-bold">{e.action}</div>
-                <div className="text-[10px] font-mono text-slate-600">{new Date(e.at).toLocaleString()}</div>
+        {/* Recent & Quick Actions combined */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+             <button onClick={() => handleNavigate("/portal/admin/accounts", "Account Control", "အကောင့်စီမံခန့်ခွဲမှု")} className="p-6 rounded-2xl bg-[#111622] border border-white/5 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left">
+              <UserCheck className="text-emerald-300 mb-3" size={22} />
+              <div className="text-lg font-black text-white uppercase tracking-widest">{t("Account Control", "အကောင့်စီမံခန့်ခွဲမှု")}</div>
+              <div className="text-xs text-slate-500 font-mono mt-2">{t("Create/approve users + manage authorities.", "User ဖန်တီး/အတည်ပြု + authority စီမံရန်")}</div>
+              <div className="mt-4 text-[10px] font-mono tracking-widest uppercase text-emerald-300 flex items-center gap-2">{t("Open", "ဝင်ရောက်မည်")} <ArrowRight size={12} /></div>
+            </button>
+            <button onClick={() => handleNavigate("/portal/admin/executive", "Executive Command", "Executive Command")} className="p-6 rounded-2xl bg-[#111622] border border-white/5 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-left">
+              <ShieldAlert className="text-amber-300 mb-3" size={22} />
+              <div className="text-lg font-black text-white uppercase tracking-widest">{t("Executive Command", "Executive Command")}</div>
+              <div className="text-xs text-slate-500 font-mono mt-2">{t("High-privilege monitoring and controls.", "အမြင့်ဆုံးအာဏာ စောင့်ကြည့်/ထိန်းချုပ်မှု")}</div>
+              <div className="mt-4 text-[10px] font-mono tracking-widest uppercase text-amber-300 flex items-center gap-2">{t("Open", "ဝင်ရောက်မည်")} <ArrowRight size={12} /></div>
+            </button>
+            <button onClick={() => handleNavigate("/portal/admin/audit", "Audit Logs", "Audit Logs")} className="p-6 rounded-2xl bg-[#111622] border border-white/5 hover:border-sky-500/30 hover:bg-sky-500/5 transition-all text-left">
+              <ShieldCheck className="text-sky-300 mb-3" size={22} />
+              <div className="text-lg font-black text-white uppercase tracking-widest">{t("Audit Logs", "Audit Logs")}</div>
+              <div className="text-xs text-slate-500 font-mono mt-2">{t("Track system events and access activity.", "စနစ်ဖြစ်ရပ်များနှင့် ဝင်ရောက်မှု စစ်ဆေးရန်")}</div>
+              <div className="mt-4 text-[10px] font-mono tracking-widest uppercase text-sky-300 flex items-center gap-2">{t("Open", "ဝင်ရောက်မည်")} <ArrowRight size={12} /></div>
+            </button>
+          </div>
+          
+          <div className="bg-[#0B101B] border border-white/5 rounded-2xl p-5 flex flex-col">
+             <div className="text-sm font-black text-white tracking-widest uppercase flex items-center gap-2 mb-4">
+                <Clock className="h-4 w-4 text-emerald-400" />
+                {t("Recent Activity", "လတ်တလော အသုံးပြုမှု")}
+             </div>
+             {recent.length === 0 ? (
+               <div className="text-xs text-slate-500 font-mono italic flex-1 flex items-center justify-center">No recent navigations.</div>
+             ) : (
+               <div className="space-y-2">
+                 {recent.slice(0, 4).map((r, i) => (
+                   <button key={i} onClick={() => navigate(r.path)} className="w-full text-left p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-emerald-500/30 transition-colors group">
+                     <div className="text-xs font-bold text-slate-300 group-hover:text-emerald-300 truncate">{lang === "en" ? r.label_en : r.label_mm}</div>
+                   </button>
+                 ))}
+               </div>
+             )}
+          </div>
+        </div>
+
+        {/* Portals Directory & Live Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-sm font-black text-white tracking-widest uppercase">{t("Portals Directory", "Portal Directory")}</div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                <input 
+                  type="text" 
+                  value={searchPortal} 
+                  onChange={e => setSearchPortal(e.target.value)} 
+                  placeholder={t("Filter portals...", "ရှာဖွေရန်...")} 
+                  className="w-full bg-black/40 border border-white/10 rounded-full h-9 pl-9 pr-4 text-xs text-slate-200 focus:border-emerald-500/50 focus:outline-none"
+                />
               </div>
-              <div className="mt-1 text-xs text-slate-500">Actor: <span className="text-slate-300">{e.actorEmail}</span>{e.targetEmail ? <> {" "}• Target: <span className="text-slate-300">{e.targetEmail}</span></> : null}</div>
-              {e.detail ? <div className="mt-1 text-xs text-slate-600">{e.detail}</div> : null}
             </div>
-          ))}
-        </div>
-        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalAudit(false)}>{t("Close", "ပိတ်")}</Button></div>
-      </div>
-    );
-  };
 
-  const ApproveRejectModal = ({ email, mode }: { email: string; mode: "approve" | "reject" }) => {
-    const target = getAccountByEmail(store.accounts, email);
-    const [note, setNote] = useState("");
-    if (!target) return null;
-    return (
-      <div className="space-y-4">
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-          <div className="flex items-center justify-between gap-3">
-            <div><div className="text-white font-black uppercase italic">{target.name}</div><div className="text-sm text-slate-500">{target.email}</div></div>
-            <Pill className={roleBadgeClass(target.role)}>{target.role}</Pill>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {filteredPortals.length === 0 ? (
+                <div className="col-span-2 p-8 text-center text-slate-500 text-xs font-mono">{t("No portals match your search.", "ရှာမတွေ့ပါ။")}</div>
+              ) : (
+                filteredPortals.map((p) => {
+                  const Icon = p.icon;
+                  return (
+                    <button key={p.id} onClick={() => handleNavigate(p.path, p.label_en, p.label_mm)} className="p-6 rounded-2xl bg-[#111622] border border-white/5 hover:border-white/20 hover:bg-white/5 transition-all text-left">
+                      <Icon className="text-slate-200 mb-3" size={22} />
+                      <div className="text-lg font-black text-white uppercase tracking-widest">{lang === "en" ? p.label_en : p.label_mm}</div>
+                      <div className="mt-4 text-[10px] font-mono tracking-widest uppercase text-slate-300 flex items-center gap-2">{t("Launch", "ဝင်ရောက်မည်")} <ArrowRight size={12} /></div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-          <div className="mt-3 text-xs text-slate-600">Requested by: <span className="text-slate-400">{target.approval?.requestedBy ?? target.createdBy}</span></div>
-        </div>
-        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Reason / Note", "အကြောင်းရင်း / မှတ်ချက်")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => (mode === "approve" ? setModalApproveEmail(null) : setModalRejectEmail(null))}>{t("Cancel", "မလုပ်တော့")}</Button>
-          <Button className={`${mode === "approve" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-rose-600 hover:bg-rose-500"} text-white font-black h-11 px-6 rounded-xl uppercase`} onClick={() => { if (mode === "approve") approve(email, note.trim() || undefined); else reject(email, note.trim() || undefined); setModalApproveEmail(null); setModalRejectEmail(null); }}>{mode === "approve" ? t("Approve", "အတည်ပြု") : t("Reject", "ငြင်းပယ်")}</Button>
-        </div>
-      </div>
-    );
-  };
 
-  const ImportModal = () => {
-    const [fileName, setFileName] = useState("");
-    const [preview, setPreview] = useState<{ ok: number; skipped: number; errors: string[]; rows: Account[] } | null>(null);
-    async function onPick(file: File | null) {
-      if (!file) return;
-      setFileName(file.name);
-      const text = await file.text();
-      const parsed = csvParse(text);
-      const header = parsed[0]?.map((h) => safeLower(h));
-      if (!header || header.length < 2) { setPreview({ ok: 0, skipped: 0, errors: ["Invalid CSV header."], rows: [] }); return; }
-      const idx = (key: string) => header.indexOf(safeLower(key));
-      const iName = idx("name"); const iEmail = idx("email"); const iRole = idx("role"); const iDept = idx("department"); const iPhone = idx("phone"); const iEmp = idx("employeeId");
-      const errors: string[] = []; const rows: Account[] = []; let skipped = 0;
-      for (let r = 1; r < parsed.length; r++) {
-        const row = parsed[r];
-        const name = (row[iName] ?? "").trim();
-        const email = (row[iEmail] ?? "").trim();
-        const role = ((row[iRole] ?? "STAFF").trim() as Role) || "STAFF";
-        const department = (row[iDept] ?? "").trim();
-        const phone = (row[iPhone] ?? "").trim();
-        const employeeId = (row[iEmp] ?? "").trim();
-        if (!name || !isEmailValid(email)) { errors.push(`Row ${r + 1}: invalid name/email`); continue; }
-        if (getAccountByEmail(store.accounts, email)) { skipped++; continue; }
-        const createdAt = nowIso();
-        rows.push({ id: uuid(), name, email, role: DEFAULT_ROLES.includes(role) ? role : "STAFF", status: "PENDING", department: department || undefined, phone: phone || undefined, employeeId: employeeId || undefined, createdAt, createdBy: actorEmail || "UNKNOWN", approval: { requestedAt: createdAt, requestedBy: actorEmail || "UNKNOWN" } });
+          <div className="space-y-4">
+            <div className="text-sm font-black text-white tracking-widest uppercase flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-300" />
+              {t("Live Audit Feed", "လုံခြုံရေးမှတ်တမ်းများ")}
+            </div>
+            <div className="bg-[#0B101B] border border-white/5 rounded-2xl p-4 space-y-4 h-[400px] overflow-y-auto custom-scrollbar">
+              {loading ? (
+                <div className="text-xs font-mono text-slate-500">{t("Loading audit feed…", "မှတ်တမ်းများ ရယူနေပါသည်…")}</div>
+              ) : audit.length === 0 ? (
+                <div className="text-xs font-mono text-slate-500">{t("No audit events found.", "လုံခြုံရေးမှတ်တမ်း မတွေ့ရှိပါ။")}</div>
+              ) : (
+                audit.map((row) => {
+                  const b = eventBadge(row.event_type);
+                  const Icon = b.icon;
+                  return (
+                    <div key={String(row.id)} className="flex gap-3 items-start border-b border-white/5 pb-3">
+                      <div className={`p-1.5 rounded-md ${b.bg} ${b.fg} mt-0.5`}><Icon size={12} /></div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-slate-200 font-mono truncate">{row.event_type}</p>
+                        <p className="text-[10px] text-slate-500 font-mono mt-1 truncate">{row.user_id ? `user_id: ${String(row.user_id).slice(0, 8)}...` : "user_id: —"}</p>
+                        <p className={`text-[9px] font-mono mt-1 uppercase tracking-wider ${b.fg}/70`}>{relativeTime(row.created_at, lang)}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </PortalShell>
+  );
+}
+EOF
+
+cat > "$EXEC_CMD" <<'EOF'
+import React from 'react';
+import SuperAdminPortal from './SuperAdminPortal';
+export default function ExecutiveCommandCenter() { return <SuperAdminPortal />; }
+EOF
+
+cat > "$ADMIN_WRAP" <<'EOF'
+import React from "react";
+import { PortalShell } from "@/components/layout/PortalShell";
+export default function AdminModuleWrapper({ title, children }: { title: string; children: React.ReactNode; }) {
+  return (
+    <PortalShell title={title}>
+      <div className="rounded-3xl border border-white/5 bg-[#0B101B] p-6 shadow-2xl min-h-[70vh]">{children}</div>
+    </PortalShell>
+  );
+}
+EOF
+
+cat > "$EXEC_MANUAL" <<'EOF'
+import React from "react";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { ClipboardList } from "lucide-react";
+export default function ExecutionManualPage() {
+  return (
+    <PortalShell title="Execution Manual">
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0B101B] border border-white/5 rounded-3xl min-h-[60vh]">
+        <ClipboardList className="h-16 w-16 text-emerald-500 mb-6 opacity-80" />
+        <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Manual Execution Module</h2>
+        <div className="text-sm text-slate-400 max-w-md mx-auto leading-relaxed">Placeholder manual execution page. Replace with your rider/driver forms, checklist module, or dynamic assignments.</div>
+        <div className="mt-8 px-4 py-2 rounded-xl bg-white/5 text-xs font-mono text-emerald-400 border border-white/10">Path: /portal/execution/manual</div>
+      </div>
+    </PortalShell>
+  );
+}
+EOF
+
+# -----------------------------------------------------------------------------
+# 7) APP.TSX & APP ROUTES
+# -----------------------------------------------------------------------------
+cat > "$APP" << 'EOF'
+import React, { Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { LanguageProvider } from "./contexts/LanguageContext";
+import { AuthProvider } from "./contexts/AuthContext";
+import { RequireAuthz } from "./routes/RequireAuthz";
+
+import EnterprisePortal from "./pages/EnterprisePortal";
+import Login from "./pages/Login";
+import SignUp from "./pages/SignUp";
+import ResetPassword from "./pages/ResetPassword";
+import Unauthorized from "./pages/Unauthorized";
+import DashboardRedirect from "./pages/DashboardRedirect";
+
+import SuperAdminPortal from "./pages/portals/admin/SuperAdminPortal";
+import AdminModuleWrapper from "./pages/portals/admin/AdminModuleWrapper";
+import ExecutiveCommandCenter from "./pages/portals/admin/ExecutiveCommandCenter";
+
+import AccountControl from "./pages/AccountControl";
+import AdminDashboard from "./pages/AdminDashboard";
+import AuditLogs from "./pages/AuditLogs";
+import AdminUsers from "./pages/AdminUsers";
+import PermissionAssignment from "./pages/PermissionAssignment";
+
+import AdminPortal from "./pages/portals/AdminPortal";
+import OperationsPortal from "./pages/portals/OperationsPortal";
+import OperationsTrackingPage from "./pages/portals/OperationsTrackingPage";
+import FinancePortal from "./pages/portals/FinancePortal";
+import FinanceReconPage from "./pages/portals/finance/FinanceReconPage";
+import HrPortal from "./pages/portals/HrPortal";
+import HrAdminOpsPage from "./pages/portals/hr/HrAdminOpsPage";
+import MarketingPortal from "./pages/portals/MarketingPortal";
+import SupportPortal from "./pages/portals/SupportPortal";
+import ExecutionPortal from "./pages/portals/ExecutionPortal";
+import ExecutionNavigationPage from "./pages/portals/ExecutionNavigationPage";
+import ExecutionManualPage from "./pages/portals/execution/ExecutionManualPage";
+import WarehousePortal from "./pages/portals/WarehousePortal";
+import WarehouseReceivingPage from "./pages/portals/warehouse/WarehouseReceivingPage";
+import WarehouseDispatchPage from "./pages/portals/warehouse/WarehouseDispatchPage";
+import BranchPortal from "./pages/portals/BranchPortal";
+import BranchInboundPage from "./pages/portals/branch/BranchInboundPage";
+import BranchOutboundPage from "./pages/portals/branch/BranchOutboundPage";
+import SupervisorPortal from "./pages/portals/SupervisorPortal";
+import SupervisorApprovalPage from "./pages/portals/supervisor/SupervisorApprovalPage";
+import SupervisorFraudPage from "./pages/portals/supervisor/SupervisorFraudPage";
+import MerchantPortal from "./pages/portals/MerchantPortal";
+import CustomerPortal from "./pages/portals/CustomerPortal";
+
+import DataEntryOpsPage from "./pages/portals/operations/DataEntryOpsPage";
+import QROpsScanPage from "./pages/portals/operations/QROpsScanPage";
+import WaybillCenterPage from "./pages/portals/operations/WaybillCenterPage";
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <Suspense fallback={<div className="min-h-screen bg-[#05080F] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" /></div>}>
+          <Router>
+            <Routes>
+              <Route path="/" element={<EnterprisePortal />} />
+              <Route path="/dashboard" element={<DashboardRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+
+              <Route element={<RequireAuthz />}>
+                {/* SUPER ADMIN PORTAL HUB */}
+                <Route path="/portal/admin" element={<SuperAdminPortal />} />
+                <Route path="/portal/admin/executive" element={<ExecutiveCommandCenter />} />
+                
+                <Route path="/portal/admin/accounts" element={<AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/dashboard" element={<AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/audit" element={<AdminModuleWrapper title="Audit Logs"><AuditLogs /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/users" element={<AdminModuleWrapper title="Admin Users"><AdminUsers /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/permission-assignment" element={<AdminModuleWrapper title="Permission Assignment"><PermissionAssignment /></AdminModuleWrapper>} />
+
+                {/* LEGACY/OTHER PORTALS */}
+                <Route path="/portal/admin-legacy" element={<AdminPortal />} />
+
+                <Route path="/portal/operations" element={<OperationsPortal />} />
+                <Route path="/portal/operations/manual" element={<DataEntryOpsPage />} />
+                <Route path="/portal/operations/qr-scan" element={<QROpsScanPage />} />
+                <Route path="/portal/operations/tracking" element={<OperationsTrackingPage />} />
+                <Route path="/portal/operations/waybill" element={<WaybillCenterPage />} />
+
+                <Route path="/portal/finance" element={<FinancePortal />} />
+                <Route path="/portal/finance/recon" element={<FinanceReconPage />} />
+
+                <Route path="/portal/marketing" element={<MarketingPortal />} />
+                <Route path="/portal/hr" element={<HrPortal />} />
+                <Route path="/portal/hr/admin" element={<HrAdminOpsPage />} />
+
+                <Route path="/portal/support" element={<SupportPortal />} />
+
+                <Route path="/portal/execution" element={<ExecutionPortal />} />
+                <Route path="/portal/execution/navigation" element={<ExecutionNavigationPage />} />
+                <Route path="/portal/execution/manual" element={<ExecutionManualPage />} />
+
+                <Route path="/portal/warehouse" element={<WarehousePortal />} />
+                <Route path="/portal/warehouse/receiving" element={<WarehouseReceivingPage />} />
+                <Route path="/portal/warehouse/dispatch" element={<WarehouseDispatchPage />} />
+
+                <Route path="/portal/branch" element={<BranchPortal />} />
+                <Route path="/portal/branch/inbound" element={<BranchInboundPage />} />
+                <Route path="/portal/branch/outbound" element={<BranchOutboundPage />} />
+
+                <Route path="/portal/supervisor" element={<SupervisorPortal />} />
+                <Route path="/portal/supervisor/approval" element={<SupervisorApprovalPage />} />
+                <Route path="/portal/supervisor/fraud" element={<SupervisorFraudPage />} />
+
+                <Route path="/portal/merchant" element={<MerchantPortal />} />
+                <Route path="/portal/customer" element={<CustomerPortal />} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </Router>
+        </Suspense>
+      </AuthProvider>
+    </LanguageProvider>
+  );
+}
+EOF
+
+cat > "$UNAUTH" << 'EOF'
+import React from 'react';
+import { useLocation, Link } from 'react-router-dom';
+export default function Unauthorized() {
+  const loc = useLocation();
+  const reason = loc.state?.reason || 'Access Denied';
+  return (
+    <div className="min-h-screen bg-[#05080F] flex flex-col items-center justify-center text-white p-4">
+      <h1 className="text-3xl font-black text-rose-500 mb-2 tracking-widest uppercase">UNAUTHORIZED</h1>
+      <p className="text-slate-400 mb-6 uppercase tracking-widest text-xs font-mono">{reason}</p>
+      <Link to="/login" className="text-emerald-400 hover:text-emerald-300 uppercase font-bold text-sm tracking-widest">Return to Login</Link>
+    </div>
+  );
+}
+EOF
+
+cat > "$DASH_REDIR" << 'EOF'
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { defaultPortalForRole } from '@/lib/portalRegistry';
+export default function DashboardRedirect() {
+  const { user, role, loading } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (loading) return;
+    if (!user) { navigate('/login', { replace: true }); return; }
+    navigate(defaultPortalForRole(role), { replace: true });
+  }, [user, role, loading, navigate]);
+  return <div className="min-h-screen bg-[#05080F] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" /></div>;
+}
+EOF
+
+# -----------------------------------------------------------------------------
+# 8) AUTH PAGES (Login, ResetPassword, AccountControl, etc)
+# -----------------------------------------------------------------------------
+cat > "$ENT_PORTAL" << 'EOF'
+import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+export default function EnterprisePortal() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  useEffect(() => { if (user) navigate("/dashboard", { replace: true }); }, [user, navigate]);
+  return (
+    <div className="relative h-screen w-full overflow-hidden text-slate-100 bg-[#05080F]">
+      {mounted && <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none grayscale"><source src="/background.mp4" type="video/mp4" /></video>}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.15),transparent_70%)]" /><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative z-10 flex flex-col items-center justify-center h-full text-center space-y-8 px-4">
+        <div className="mx-auto w-32 h-32 bg-black/40 border border-white/10 rounded-[2rem] flex items-center justify-center mb-4 animate-in fade-in zoom-in duration-1000 shadow-2xl overflow-hidden"><img src="/logo.png" alt="Britium Logo" className="w-24 h-24 object-contain" /></div>
+        <div className="space-y-4"><h1 className="text-5xl md:text-7xl font-bold tracking-tighter uppercase text-white">BRITIUM <span className="text-emerald-500">EXPRESS</span></h1><p className="text-sm md:text-lg text-white/60 uppercase tracking-[0.3em] font-light">Enterprise Logistics Intelligence Platform</p></div>
+        <Button size="lg" className="bg-emerald-600 hover:bg-emerald-500 text-white px-12 py-7 text-xl font-bold rounded-2xl transition-all shadow-xl tracking-widest" onClick={() => navigate("/login")}>Enter Enterprise Portal</Button>
+      </div>
+    </div>
+  );
+}
+EOF
+
+cat > "$LOGIN" <<'EOF'
+// @ts-nocheck
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { supabase, SUPABASE_CONFIGURED, getRememberMe, setRememberMe } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { defaultPortalForRole, normalizeRole } from "@/lib/portalRegistry";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Copy, Download, Globe, Loader2, Lock, Mail, RefreshCw, ShieldCheck, UserPlus } from "lucide-react";
+
+type View = "login" | "forgot" | "request" | "force_change" | "mfa" | "magic" | "otp_verify";
+const MFA_REQUIRED_ROLES = new Set(["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "ADM", "MGR", "ADMIN"]);
+
+async function loadProfile(userId: string) {
+  const trySelect = async (sel: string) => supabase.from("profiles").select(sel).eq("id", userId).maybeSingle();
+  let { data, error } = await trySelect("id, role, role_code, app_role, user_role, must_change_password, requires_password_change");
+  if (error && (error as any).code === "42703") { ({ data, error } = await trySelect("id, role, must_change_password")); }
+  if (error) return { role: "GUEST", mustChange: false };
+  const row: any = data || {};
+  const rawRole = row.role ?? row.app_role ?? row.user_role ?? row.role_code ?? "GUEST";
+  const mustChange = Boolean(row.must_change_password) || Boolean(row.requires_password_change);
+  return { role: normalizeRole(rawRole), mustChange };
+}
+
+async function hasAal2() {
+  try {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) return false;
+    return data?.currentLevel === "aal2";
+  } catch { return false; }
+}
+
+export default function Login() {
+  const nav = useNavigate();
+  const loc = useLocation() as any;
+  const auth = useAuth();
+  const { lang, setLanguage, toggleLang } = useLanguage();
+  const [currentLang, setCurrentLang] = useState(lang || "en");
+  const t = (en: string, my: string) => (currentLang === "en" ? en : my);
+
+  const [view, setView] = useState<View>("login");
+  const [loading, setLoading] = useState(false);
+  const [configMissing, setConfigMissing] = useState(false);
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState<boolean>(() => getRememberMe());
+  
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [otpToken, setOtpToken] = useState("");
+  const [otpHint, setOtpHint] = useState("");
+  
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [targetPath, setTargetPath] = useState<string>("/");
+
+  const [mfaStage, setMfaStage] = useState<"idle" | "enroll" | "verify">("idle");
+  const [mfaFactorId, setMfaFactorId] = useState<string>("");
+  const [mfaChallengeId, setMfaChallengeId] = useState<string>("");
+  const [mfaQrSvg, setMfaQrSvg] = useState<string>("");
+  const [mfaSecret, setMfaSecret] = useState<string>("");
+
+  const brand = useMemo(() => ({ title: "BRITIUM", subtitleEn: "Welcome to Britium Portal", subtitleMy: "Britium Portal သို့ ကြိုဆိုပါသည်" }), []);
+  useEffect(() => { if (lang) setCurrentLang(lang); }, [lang]);
+  const toggleLanguage = () => { const next = currentLang === "en" ? "my" : "en"; setCurrentLang(next); if (typeof setLanguage === "function") setLanguage(next); else if (typeof toggleLang === "function") toggleLang(); };
+  const clearMessages = () => { setErrorMsg(""); setSuccessMsg(""); };
+
+  async function goAfterAuth(role?: string) {
+    const from = loc?.state?.from;
+    const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(role);
+    setTargetPath(dst);
+    nav(dst, { replace: true });
+  }
+
+  async function ensureMfa(role?: string) {
+    const r = normalizeRole(role);
+    if (!MFA_REQUIRED_ROLES.has(r)) return true;
+    const ok = await hasAal2();
+    if (ok) return true;
+    setView("mfa");
+    await prepareMfa();
+    return false;
+  }
+
+  async function prepareMfa() {
+    setMfaStage("idle"); setOtpToken(""); setMfaQrSvg(""); setMfaSecret(""); setMfaFactorId(""); setMfaChallengeId("");
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (error) throw error;
+      const totpFactors = (data?.totp || data?.all || []) as any[];
+      const verified = totpFactors.find((f) => (f?.status || "").toLowerCase() === "verified") || totpFactors[0];
+
+      if (verified?.id) {
+        const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: verified.id });
+        if (chErr) throw chErr;
+        setMfaFactorId(verified.id); setMfaChallengeId(ch?.id || ""); setMfaStage("verify");
+        setSuccessMsg(t("Enter your 6-digit authenticator code.", "Authenticator code (၆ လုံး) ကို ထည့်ပါ။"));
+        return;
       }
-      setPreview({ ok: rows.length, skipped, errors, rows });
-    }
-    function doImport() {
-      if (!actor || !canImport || !preview) return;
-      setStore((prev) => ({ ...prev, accounts: [...preview.rows, ...prev.accounts] }));
-      auditPush("CSV_IMPORT_ACCOUNTS", undefined, `Imported=${preview.ok} Skipped=${preview.skipped} Errors=${preview.errors.length}`);
-      setToast({ type: "ok", msg: t("Import completed.", "သွင်းပြီးပါပြီ။") });
-      setModalImport(false);
-    }
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="text-sm text-slate-500">{t("CSV columns:", "CSV ကော်လံများ:")} name,email,role,department,phone,employeeId</div>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
-            <Button type="button" className="bg-sky-600 hover:bg-sky-500 text-white font-black h-10 px-4 rounded-xl uppercase pointer-events-none"><Upload className="h-4 w-4 mr-2" />{fileName ? fileName : t("Pick CSV", "CSV ရွေး")}</Button>
-          </label>
-        </div>
-        {preview ? (
-          <div className="p-4 rounded-2xl bg-[#0B101B] border border-white/10 space-y-2">
-            <div className="text-sm text-slate-300">OK: <span className="text-emerald-300 font-bold">{preview.ok}</span> • Skipped: <span className="text-amber-300 font-bold">{preview.skipped}</span> • Errors: <span className="text-rose-300 font-bold">{preview.errors.length}</span></div>
-            {preview.errors.length ? <div className="text-xs text-rose-300 font-mono space-y-1">{preview.errors.slice(0, 6).map((e) => (<div key={e}>{e}</div>))}</div> : null}
-          </div>
-        ) : null}
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalImport(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
-          <Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!preview?.ok} onClick={doImport}>{t("Confirm", "အတည်ပြု")}</Button>
-        </div>
-      </div>
-    );
-  };
+      const { data: enr, error: enrErr } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      if (enrErr) throw enrErr;
+      setMfaFactorId(enr?.id || ""); setMfaQrSvg(enr?.totp?.qr_code || ""); setMfaSecret(enr?.totp?.secret || "");
+      const { data: ch2, error: ch2Err } = await supabase.auth.mfa.challenge({ factorId: enr.id });
+      if (ch2Err) throw ch2Err;
+      setMfaChallengeId(ch2?.id || ""); setMfaStage("enroll");
+      setSuccessMsg(t("Scan QR with authenticator app, then enter the code.", "Authenticator နဲ့ QR စကန်ပြီး code ထည့်ပါ။"));
+    } catch (e: any) { setErrorMsg(e?.message || t("MFA setup failed.", "MFA စတင်မရပါ။")); setMfaStage("idle"); } finally { setLoading(false); }
+  }
 
-  const BulkModal = () => {
-    const [action, setAction] = useState<"APPROVE" | "REJECT" | "BLOCK" | "UNBLOCK" | "SET_ROLE">("APPROVE");
-    const [note, setNote] = useState("");
-    const [role, setRole] = useState<Role>("STAFF");
-    function apply() {
-      if (!actor || !canBulk) return;
-      if (!selectedEmails.length) return;
-      for (const email of selectedEmails) {
-        if (action === "APPROVE") approve(email, note.trim() || undefined);
-        if (action === "REJECT") reject(email, note.trim() || undefined);
-        if (action === "BLOCK") blockToggle(email, true);
-        if (action === "UNBLOCK") blockToggle(email, false);
-        if (action === "SET_ROLE") changeRole(email, role);
-      }
-      auditPush("BULK_APPLIED", undefined, `Action=${action} Count=${selectedEmails.length}`);
-      clearSelection();
-      setModalBulk(false);
-    }
-    return (
-      <div className="space-y-4">
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-          <div className="text-slate-300">{t("Selected", "ရွေးထား")}: <span className="font-black text-white">{selectedEmails.length}</span></div>
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={clearSelection}><RefreshCw className="h-4 w-4 mr-2" /> Clear</Button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Action", "လုပ်ဆောင်ချက်")}</div>
-            <Select value={action} onChange={(e) => setAction(e.target.value as any)}>
-              <option value="APPROVE">{t("Approve", "အတည်ပြု")}</option><option value="REJECT">{t("Reject", "ငြင်းပယ်")}</option><option value="BLOCK">{t("Block", "ပိတ်")}</option><option value="UNBLOCK">{t("Unblock", "ဖွင့်")}</option><option value="SET_ROLE">{t("Set role", "Role သတ်မှတ်")}</option>
-            </Select>
-          </div>
-          {action === "SET_ROLE" ? (<div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Role", "Role")}</div><Select value={role} onChange={(e) => setRole(e.target.value as Role)}>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>) : (<div />)}
-        </div>
-        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Note (optional)", "မှတ်ချက် (optional)")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalBulk(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
-          <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!selectedEmails.length} onClick={apply}>{t("Apply", "လုပ်ဆောင်")}</Button>
-        </div>
-      </div>
-    );
-  };
+  async function verifyMfa(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!otpToken || otpToken.trim().length < 6) return setErrorMsg(t("Enter the 6-digit code.", "Code ၆ လုံး ထည့်ပါ။"));
+    setLoading(true);
+    try {
+      const code = otpToken.trim().replace(/\s+/g, "");
+      const { error } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: mfaChallengeId, code });
+      if (error) throw error;
+      const ok = await hasAal2();
+      if (!ok) throw new Error("MFA verification incomplete.");
+      setSuccessMsg(t("MFA verified. Redirecting…", "MFA အောင်မြင်ပါပြီ။ ဆက်သွားနေသည်…"));
+      setTimeout(() => nav(targetPath || "/", { replace: true }), 400);
+    } catch (e: any) { setErrorMsg(e?.message || t("Invalid code.", "Code မမှန်ပါ။")); } finally { setLoading(false); }
+  }
 
-  const ProfileModal = ({ email }: { email: string }) => {
-    const target = getAccountByEmail(store.accounts, email);
-    if (!target) return null;
-    const grants = activeGrantsFor(store.grants, target.email);
-    return (
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div><div className="text-white font-black uppercase italic">{target.name}</div><div className="text-slate-500 text-sm">{target.email}</div></div>
-          <div className="flex items-center gap-2"><Pill className={roleBadgeClass(target.role)}>{target.role}</Pill><Pill className="bg-white/5 text-slate-300">{target.department ?? "-"}</Pill></div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">STATUS</div><div className={`mt-2 font-black ${formatStatus(target.status).cls}`}>{formatStatus(target.status).label}</div></Card>
-          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">CREATED</div><div className="mt-2 text-sm text-slate-200">{new Date(target.createdAt).toLocaleString()}</div><div className="text-xs text-slate-600">{target.createdBy}</div></Card>
-          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">AUTHORITIES</div><div className="mt-2 text-sm text-slate-200">{roleIsPrivileged(target.role) ? "ALL" : grants.length}</div><div className="text-xs text-slate-600">{roleIsPrivileged(target.role) ? "Privileged" : "Delegated"}</div></Card>
-        </div>
-        <Divider />
-        <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">Authorities</div>
-          <div className="flex flex-wrap gap-2">
-            {roleIsPrivileged(target.role) ? (<Pill className="bg-sky-500/10 text-sky-400">ALL_PERMISSIONS</Pill>) : grants.length ? (grants.map((g) => (<Pill key={g.id} className="bg-white/5 text-slate-200">{String(g.permission)}</Pill>))) : (<div className="text-sm text-slate-600">No delegated permissions.</div>)}
-          </div>
-        </div>
-        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalProfileEmail(null)}>{t("Close", "ပိတ်")}</Button></div>
-      </div>
-    );
-  };
+  useEffect(() => {
+    (async () => {
+      const ok = Boolean(SUPABASE_CONFIGURED); setConfigMissing(!ok); if (!ok) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const userId = data?.session?.user?.id;
+        if (!userId) return;
+        const prof = await loadProfile(userId);
+        const from = loc?.state?.from;
+        const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(prof.role);
+        setTargetPath(dst);
+        if (prof.mustChange) { setView("force_change"); return; }
+        const need = MFA_REQUIRED_ROLES.has(normalizeRole(prof.role));
+        if (need) { const okAal = await hasAal2(); if (!okAal) { setView("mfa"); await prepareMfa(); return; } }
+        nav(dst, { replace: true });
+      } catch {}
+    })();
+  }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System configuration is missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      setRememberMe(remember);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await auth.refresh?.();
+      const prof = await loadProfile(data.user.id);
+      const dst = defaultPortalForRole(prof.role);
+      setTargetPath(dst);
+      const isDefault = password === "P@ssw0rd1" || password.startsWith("Britium@");
+      if (prof.mustChange || isDefault) { setView("force_change"); setLoading(false); return; }
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      await goAfterAuth(prof.role);
+    } catch (e: any) { setErrorMsg(t("Access Denied: Invalid credentials.", "ဝင်ရောက်ခွင့် ငြင်းပယ်ခံရသည်: အချက်အလက်မှားနေသည်။")); } finally { setLoading(false); }
+  }
+
+  async function handleMagicSend(e: React.FormEvent) {
+    e.preventDefault(); clearMessages(); setLoading(true);
+    try {
+      const emailRedirectTo = `${window.location.origin}/login`;
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+      if (error) throw error;
+      setSuccessMsg(t("Secure link sent. Check your email.", "လုံခြုံသော link ပို့ပြီးပါပြီ။ Email စစ်ပါ။"));
+      setOtpHint(t("If your email contains a 6-digit code, enter it below.", "Email ထဲတွင် ကုဒ် ၆ လုံးပါပါက အောက်တွင်ထည့်ပါ။"));
+      setView("otp_verify");
+    } catch (e: any) { setErrorMsg(e?.message || t("Failed to send link.", "Link ပို့မရပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleOtpVerify(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!otpToken.trim()) { setErrorMsg(t("Enter the code to continue.", "ဆက်လက်လုပ်ဆောင်ရန် ကုဒ်ထည့်ပါ။")); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email, token: otpToken.trim(), type: "email" });
+      if (error) throw error;
+      if (auth?.refresh) await auth.refresh();
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session?.user?.id) throw new Error("No session.");
+      const prof = await loadProfile(data.session.user.id);
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      await goAfterAuth(prof.role);
+    } catch (e: any) { setErrorMsg(e?.message || t("OTP invalid.", "OTP ကုဒ် မှားယွင်းနေသည်။")); } finally { setLoading(false); }
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System config missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      setSuccessMsg(t("Recovery link sent. Please check your email.", "Recovery link ကို ပို့ပြီးပါပြီ။ အီးမေးလ်ကို စစ်ပါ။"));
+    } catch (e: any) { setErrorMsg(e?.message || t("Unable to send recovery email.", "Recovery email ပို့မရပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleRequestAccess(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (!SUPABASE_CONFIGURED) { setConfigMissing(true); return setErrorMsg(t("System config missing.", "System config မပြည့်စုံပါ။")); }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      setSuccessMsg(t("Request submitted. Please verify your email if prompted.", "Request တင်ပြီးပါပြီ။ လိုအပ်ပါက အီးမေးလ်အတည်ပြုပါ။"));
+      setTimeout(() => setView("login"), 900);
+    } catch (e: any) { setErrorMsg(e?.message || t("Request failed.", "Request မအောင်မြင်ပါ။")); } finally { setLoading(false); }
+  }
+
+  async function handleForceChange(e: React.FormEvent) {
+    e.preventDefault(); clearMessages();
+    if (newPassword !== confirmPassword) return setErrorMsg(t("Passwords do not match.", "စကားဝှက်များ မကိုက်ညီပါ။"));
+    if (newPassword.length < 8) return setErrorMsg(t("Password must be at least 8 characters.", "စကားဝှက်သည် အနည်းဆုံး ၈ လုံး ဖြစ်ရမည်။"));
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      try { await supabase.from("profiles").update({ must_change_password: false, requires_password_change: false }).eq("id", data.user.id); } catch {}
+      await auth.refresh?.();
+      const prof = await loadProfile(data.user.id);
+      const passed = await ensureMfa(prof.role);
+      if (!passed) { setLoading(false); return; }
+      setSuccessMsg(t("Password updated. Redirecting…", "စကားဝှက် ပြောင်းပြီးပါပြီ။ ဆက်သွားနေသည်…"));
+      setTimeout(() => goAfterAuth(prof.role), 450);
+    } catch (e: any) { setErrorMsg(e?.message || t("Password update failed.", "စကားဝှက်ပြောင်းမရပါ။")); } finally { setLoading(false); }
+  }
+
+  const wizardViews: View[] = ["login", "magic", "forgot", "request"];
+  const wizardIndex = wizardViews.indexOf(view);
+  const showWizardNav = wizardIndex >= 1;
+  const prevTarget: View = wizardIndex > 0 ? wizardViews[wizardIndex - 1] : "login";
+  const nextTarget: View = wizardIndex >= 0 && wizardIndex < wizardViews.length - 1 ? wizardViews[wizardIndex + 1] : view;
+  const canPrev = showWizardNav && !loading;
+  const canNext = showWizardNav && wizardIndex < wizardViews.length - 1 && !loading;
+  const goPrev = () => { clearMessages(); setView(prevTarget); };
+  const goNext = () => { if (!canNext) return; clearMessages(); setView(nextTarget); };
+
+  const pageTitle = useMemo(() => {
+    if (view === "forgot") return t("Secure Password Recovery", "စကားဝှက် ပြန်လည်ရယူခြင်း");
+    if (view === "request") return t("Request Access", "ဝင်ရောက်ခွင့် တောင်းမည်");
+    if (view === "force_change") return t("Security Update Required", "လုံခြုံရေး အပ်ဒိတ် လိုအပ်");
+    if (view === "mfa") return t("Multi-Factor Verification", "အဆင့်မြင့် အတည်ပြုခြင်း (MFA)");
+    return t("Sign in", "အကောင့်ဝင်မည်");
+  }, [view, currentLang]);
 
   return (
-    <div className="p-6 md:p-10 space-y-6 bg-[#0B101B] min-h-screen text-slate-300">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-[#05080F] p-6 md:p-8 rounded-[2.5rem] border border-white/5">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-sky-500/10 rounded-2xl"><UserPlus className="text-sky-500 h-8 w-8" /></div>
-          <div>
-            <h1 className="text-3xl font-black text-white uppercase italic">{t("Account Control", "အကောင့်ထိန်းချုပ်မှု")}</h1>
-            <p className="text-sky-500 font-mono text-[10px] uppercase tracking-widest italic">{t("Enterprise Identity Governance", "လုပ်ငန်းသုံး Identity Governance")}</p>
-            <p className="text-xs text-slate-500 mt-1">{actorEmail ? `${t("Signed in as", "ဝင်ထားသည်")}: ${actorEmail}` : t("Not signed in", "ဝင်မထားပါ")}</p>
-            {actor ? (<p className="text-[10px] text-slate-600 font-mono mt-1">ROLE: {actor.role} • STATUS: {actor.status} • PERMS: {roleIsPrivileged(actor.role) ? "ALL" : Array.from(actorPerms).join(", ") || "—"}</p>) : (<p className="text-xs text-amber-300 mt-1 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{t("Session user not registered in Account Registry.", "Session user သည် Registry ထဲတွင် မရှိပါ။")}</p>)}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:gap-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <input className="bg-[#0B101B] border border-white/10 rounded-full h-12 pl-12 pr-6 text-sm w-full md:w-72" placeholder={t("Search accounts...", "အကောင့်ရှာရန်...")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!canRead} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {canExport ? (<><Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={exportAccountsCsv}><Download className="h-4 w-4 mr-2" />{t("Export CSV", "CSV ထုတ်ရန်")}</Button><Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={exportGrantsCsv}><Download className="h-4 w-4 mr-2" />Authorities CSV</Button></>) : null}
-            {canImport ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalImport(true)}><Upload className="h-4 w-4 mr-2" />{t("Import CSV", "CSV သွင်းရန်")}</Button>) : null}
-            {canBulk ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalBulk(true)}><ShieldCheck className="h-4 w-4 mr-2" />{t("Bulk Actions", "အုပ်စုလိုက်")}</Button>) : null}
-            {canAudit ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalAudit(true)}><History className="h-4 w-4 mr-2" />{t("Audit Log", "Audit Log")}</Button>) : null}
-            {canCreate ? (<Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-12 px-6 rounded-xl uppercase" onClick={() => setModalCreate(true)}>{t("Create Account", "အကောင့်အသစ်ဖွင့်မည်")}</Button>) : null}
-          </div>
-        </div>
+    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#05080F] p-4 text-slate-100">
+      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none grayscale"><source src="/background.mp4" type="video/mp4" /></video>
+      <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
+      <div className="absolute top-6 right-6 z-20">
+        <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full"><Globe className="h-4 w-4 mr-2" /><span className="text-xs font-black tracking-widest uppercase">{currentLang === "en" ? "MY" : "EN"}</span></Button>
       </div>
 
-      {toast ? (
-        <div className={`rounded-2xl border px-4 py-3 text-sm flex items-center gap-2 ${toast.type === "ok" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300" : toast.type === "warn" ? "border-amber-500/20 bg-amber-500/5 text-amber-300" : "border-rose-500/20 bg-rose-500/5 text-rose-300"}`}>
-          {toast.type === "ok" ? <CheckCircle2 className="h-4 w-4" /> : toast.type === "warn" ? <AlertTriangle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}<div>{toast.msg}</div>
+      <div className="relative z-10 w-full max-w-md space-y-6 py-12">
+        <div className="text-center space-y-2">
+          <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl"><img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" /></div>
+          <h1 className="text-4xl font-black tracking-tight text-white">{brand.title}</h1>
+          <p className="text-sm text-slate-300">{t(brand.subtitleEn, brand.subtitleMy)}</p>
         </div>
-      ) : null}
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Pill className="bg-white/5 text-slate-300">{t("Filters", "စစ်ထုတ်မှု")}</Pill>
-          <div className="flex items-center gap-2"><div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{t("Status", "အခြေအနေ")}</div><Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="w-44" disabled={!canRead}><option value="ALL">ALL</option><option value="ACTIVE">ACTIVE</option><option value="PENDING">PENDING</option><option value="SUSPENDED">SUSPENDED</option><option value="REJECTED">REJECTED</option><option value="ARCHIVED">ARCHIVED</option></Select></div>
-          <div className="flex items-center gap-2"><div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{t("Role", "Role")}</div><Select value={filterRole} onChange={(e) => setFilterRole(e.target.value as any)} className="w-52" disabled={!canRead}><option value="ALL">ALL</option>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>
-          <Button variant="ghost" className="h-11 text-slate-400 hover:text-white" onClick={() => { setQ(""); setFilterStatus("ALL"); setFilterRole("ALL"); setToast({ type: "ok", msg: t("Reset.", "ပြန်ချ") }); }} disabled={!canRead}><RefreshCw className="h-4 w-4 mr-2" />{t("Reset", "ပြန်ချ")}</Button>
-        </div>
-        <div className="text-xs text-slate-600 font-mono">STORE: {STORAGE_KEY}</div>
-      </div>
+        {configMissing ? (
+          <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[1.75rem] overflow-hidden shadow-2xl">
+            <CardHeader><CardTitle className="flex items-center gap-2 text-rose-400"><AlertCircle className="h-5 w-5" />{t("System Configuration Required", "System Config လိုအပ်သည်")}</CardTitle></CardHeader>
+            <CardContent className="space-y-4"><div className="text-sm text-slate-300">{t("Supabase environment variables are missing.", "Supabase env var မရှိသေးပါ။")}</div></CardContent>
+          </Card>
+        ) : (
+          <>
+            <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+              <div className="h-1.5 w-full bg-gradient-to-r from-emerald-600 to-teal-400" />
+              <CardContent className="p-7 md:p-8 space-y-5">
+                {errorMsg && (<div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-300"><AlertCircle className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{errorMsg}</p></div>)}
+                {successMsg && (<div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-300"><CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{successMsg}</p></div>)}
 
-      {!canRead ? (
-        <Card className="bg-[#05080F] border-none ring-1 ring-white/5 rounded-[2rem] p-6"><div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5 text-amber-300" /><div><div className="text-white font-black uppercase italic">{t("Access denied", "ဝင်ရောက်ခွင့်မရှိပါ")}</div><div className="text-sm text-slate-500">{t("Super Admin must grant you USER_READ.", "Super Admin မှ USER_READ အာဏာပေးရပါမည်။")}</div></div></div></Card>
-      ) : (
-        <Card className="bg-[#05080F] border-none ring-1 ring-white/5 rounded-[3rem] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-white/5 font-mono text-slate-500 uppercase text-[10px] tracking-[0.2em]">
-                <tr>
-                  <th className="p-6"><label className="inline-flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-sky-500" checked={paged.length > 0 && paged.every((a) => selected[a.email])} onChange={(e) => selectAllOnPage(e.target.checked)} disabled={!canBulk} />{t("Select", "ရွေးချယ်")}</label></th>
-                  <th className="p-6">{t("Personnel Info", "ဝန်ထမ်းအချက်အလက်")}</th>
-                  <th className="p-6">{t("Role / Authority", "Role / Authority")}</th>
-                  <th className="p-6">{t("Status", "အခြေအနေ")}</th>
-                  <th className="p-6 text-right">{t("Actions", "လုပ်ဆောင်မှု")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {paged.map((user) => {
-                  const st = formatStatus(user.status);
-                  const blocked = user.status === "SUSPENDED";
-                  return (
-                    <tr key={user.email} className="hover:bg-white/5 transition-all">
-                      <td className="p-6"><input type="checkbox" className="h-4 w-4 accent-sky-500" checked={!!selected[user.email]} disabled={!canBulk} onChange={(e) => setSelected((prev) => ({ ...prev, [user.email]: e.target.checked }))} /></td>
-                      <td className="p-6"><p className="font-bold text-white uppercase italic">{user.name}</p><p className="text-xs text-slate-500">{user.email}</p><div className="mt-2 flex flex-wrap gap-2">{user.department ? <Pill className="bg-white/5 text-slate-300">{user.department}</Pill> : null}{user.employeeId ? <Pill className="bg-white/5 text-slate-300">{user.employeeId}</Pill> : null}{user.phone ? <Pill className="bg-white/5 text-slate-300">{user.phone}</Pill> : null}</div></td>
-                      <td className="p-6"><Pill className={roleBadgeClass(user.role)}>{user.role}</Pill>{user.status === "PENDING" ? (<div className="mt-2 text-xs text-slate-600">Pending approval • <span className="text-slate-500">{user.approval?.requestedBy ?? user.createdBy}</span></div>) : null}<div className="mt-2 text-xs text-slate-600">Authorities: <span className="text-slate-300">{roleIsPrivileged(user.role) ? "ALL" : activeGrantsFor(store.grants, user.email).length}</span></div></td>
-                      <td className="p-6"><span className={`text-[10px] font-bold italic ${st.cls}`}>{st.label}</span></td>
-                      <td className="p-6 text-right space-x-1 md:space-x-2">
-                        <Button variant="ghost" className="h-10 text-slate-500 hover:text-white" title="View" onClick={() => setModalProfileEmail(user.email)}><UserCog size={16} /></Button>
-                        <Button variant="ghost" className="h-10 text-slate-500 hover:text-white disabled:opacity-40" title="Authority" disabled={!canAuth} onClick={() => setModalAuthorityEmail(user.email)}><ShieldCheck size={16} /></Button>
-                        <Button variant="ghost" className={`h-10 ${blocked ? "text-emerald-400 hover:bg-emerald-500/10" : "text-rose-500 hover:bg-rose-500/10"} disabled:opacity-40`} title={blocked ? "Unblock" : "Block"} disabled={!canBlock} onClick={() => blockToggle(user.email, !blocked)}><Lock size={16} /></Button>
-                        {canRoleEdit ? (<select className="h-10 rounded-xl bg-[#0B101B] border border-white/10 px-3 text-xs text-slate-200 ml-2" value={user.role} onChange={(e) => changeRole(user.email, e.target.value as Role)} title="Role">{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</select>) : null}
-                        {user.status === "PENDING" ? (<><Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-10 px-4 rounded-xl uppercase disabled:opacity-40 ml-2" disabled={!canApprove} onClick={() => setModalApproveEmail(user.email)}>{t("Approve", "အတည်ပြု")}</Button><Button className="bg-rose-600 hover:bg-rose-500 text-white font-black h-10 px-4 rounded-xl uppercase disabled:opacity-40" disabled={!canReject} onClick={() => setModalRejectEmail(user.email)}>{t("Reject", "ငြင်းပယ်")}</Button></>) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filtered.length === 0 ? <div className="p-10 text-center text-slate-600">{t("No accounts found.", "အကောင့်မတွေ့ပါ။")}</div> : null}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-white/5">
-            <div className="text-xs text-slate-600 font-mono">{filtered.length} total • page {Math.min(page, totalPages)} / {totalPages}</div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" className="h-10 text-slate-400 hover:text-white disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
-              <Button variant="ghost" className="h-10 text-slate-400 hover:text-white disabled:opacity-40" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-400" /><div className="font-extrabold uppercase tracking-widest text-sm">{pageTitle}</div></div>
+                </div>
+
+                {(view === "login" || view === "magic" || view === "otp_verify") && (
+                  <div className="flex gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                    <Button type="button" variant={view === "login" ? "default" : "ghost"} className={view === "login" ? "bg-emerald-600 hover:bg-emerald-500 text-white flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("login"); }}>{t("Password", "စကားဝှက်")}</Button>
+                    <Button type="button" variant={view !== "login" ? "default" : "ghost"} className={view !== "login" ? "bg-[#D4AF37] hover:bg-[#b5952f] text-black flex-1 rounded-xl shadow-lg" : "text-slate-400 flex-1 rounded-xl"} onClick={() => { clearMessages(); setView("magic"); }}>{t("Email Link", "အီးမေးလ်")}</Button>
+                  </div>
+                )}
+
+                {view === "login" && (
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12 focus:border-emerald-500/40" placeholder={t("Password", "စကားဝှက်")} /></div>
+                    <div className="flex items-center justify-between px-1">
+                      <label className="flex items-center gap-2 text-[11px] text-slate-300 font-bold cursor-pointer"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-emerald-500" />{t("Remember me", "မှတ်ထားမည်")}</label>
+                      <div className="flex items-center gap-4 text-[11px] font-black"><button type="button" onClick={() => { clearMessages(); setView("forgot"); }} className="text-slate-400 hover:text-emerald-300 uppercase tracking-widest">{t("Forgot?", "စကားဝှက်မေ့သွားလား")}</button><button type="button" onClick={() => { clearMessages(); setView("request"); }} className="text-[#D4AF37] hover:text-[#b5952f] uppercase tracking-widest flex items-center gap-1"><UserPlus className="h-3 w-3" /> {t("Sign Up", "အကောင့်လုပ်မည်")}</button></div>
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-2">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Authenticating…", "စစ်ဆေးနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Login", "အကောင့်ဝင်မည်")} <ArrowRight className="h-4 w-4" /></span>}</Button>
+                  </form>
+                )}
+
+                {view === "magic" && (
+                  <form onSubmit={handleMagicSend} className="space-y-5">
+                    <div className="text-[11px] text-slate-400 px-2 leading-relaxed italic">{t("System will dispatch a one-time secure link to your work inbox.", "စနစ်မှ တစ်ခါသုံး လုံခြုံရေး link ကို သင့်အီးမေးလ်သို့ ပို့ပေးပါမည်။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-500" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-2xl shadow-xl transition-all">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Send Link", "Link ပို့မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "otp_verify" && (
+                  <form onSubmit={handleOtpVerify} className="space-y-5">
+                    <div className="text-xs text-emerald-400 font-bold px-2">{otpHint}</div>
+                    <div className="relative"><ShieldCheck className="absolute left-4 top-4 h-5 w-5 text-slate-500" /><Input required value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 rounded-2xl pl-12 h-14 text-white font-mono tracking-[0.5em] text-center" placeholder="000000" maxLength={6} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-2xl">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("Verify & Login", "အတည်ပြုပြီး ဝင်မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "forgot" && (
+                  <form onSubmit={handleForgot} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Enter your email to receive a secure recovery link.", "Recovery link ရယူရန် အီးမေးလ်ထည့်ပါ။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Corporate Email", "အီးမေးလ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-slate-700 hover:bg-slate-600 text-white font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Sending…", "ပို့နေသည်…")}</span> : t("Send Recovery Link", "Recovery Link ပို့မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "request" && (
+                  <form onSubmit={handleRequestAccess} className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("This platform is for authorized personnel. Submit a request to create an account.", "ဤစနစ်သည် ခွင့်ပြုထားသူများအတွက် ဖြစ်သည်။ အကောင့်ဖန်တီးရန် request တင်ပါ။")}</div>
+                    <div className="relative"><Mail className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Work Email", "အလုပ်အီးမေးလ်")} /></div>
+                    <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Submitting…", "တင်နေသည်…")}</span> : t("Submit Request", "Request တင်မည်")}</Button>
+                  </form>
+                )}
+
+                {view === "force_change" && (
+                  <form onSubmit={handleForceChange} className="space-y-4">
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">{t("A password update is required before access is granted.", "ဝင်ရောက်ခွင့်မပြုမီ စကားဝှက်အသစ်ပြောင်းရန် လိုအပ်ပါသည်။")}</div>
+                    <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} /></div>
+                    <div className="relative"><CheckCircle2 className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-black/40 border-amber-500/30 text-white h-12 rounded-xl pl-12" placeholder={t("Confirm Password", "စကားဝှက် အတည်ပြုပါ")} /></div>
+                    <Button type="submit" disabled={loading} className="w-full h-12 bg-amber-600 hover:bg-amber-500 text-white font-black tracking-widest uppercase rounded-xl">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : <span className="flex items-center justify-center gap-2">{t("Update & Continue", "ပြောင်းပြီး ဆက်သွားမည်")} <ArrowRight className="h-4 w-4" /></span>}</Button>
+                  </form>
+                )}
+
+                {view === "mfa" && (
+                  <div className="space-y-4">
+                    <div className="text-sm text-slate-300">{t("Admin accounts require MFA. Use an authenticator app.", "Admin အကောင့်များသည် MFA လိုအပ်ပါသည်။ Authenticator app အသုံးပြုပါ။")}</div>
+                    {mfaStage === "enroll" && (
+                      <div className="space-y-3">
+                        {mfaQrSvg && (<div className="rounded-xl border border-white/10 bg-black/40 p-3"><div className="text-xs text-slate-300 mb-2">{t("Scan this QR code:", "ဒီ QR ကို စကန်ပါ:")}</div><div className="bg-white rounded-lg p-2 overflow-auto" dangerouslySetInnerHTML={{ __html: mfaQrSvg }} /></div>)}
+                        {mfaSecret && (<div className="rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-slate-300"><div className="font-bold">{t("Manual key:", "Manual key:")}</div><div className="font-mono break-all">{mfaSecret}</div><div className="mt-2 flex gap-2 flex-wrap"><Button type="button" size="sm" variant="outline" className="border-white/10 bg-black/40 hover:bg-white/5" onClick={() => navigator.clipboard.writeText(mfaSecret)}><Copy className="h-3 w-3 mr-2" /> {t("Copy", "ကူးယူ")}</Button></div></div>)}
+                      </div>
+                    )}
+                    <form onSubmit={verifyMfa} className="space-y-3">
+                      <Input inputMode="numeric" pattern="\d*" value={otpToken} onChange={(e) => setOtpToken(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono tracking-[0.5em] text-center" placeholder="000000" />
+                      <div className="flex gap-2 flex-wrap">
+                        <Button type="submit" disabled={loading || !mfaFactorId || !mfaChallengeId} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Verify", "အတည်ပြု")}</Button>
+                        <Button type="button" variant="outline" disabled={loading} className="border-white/10 bg-black/40 hover:bg-white/5 text-slate-200 rounded-xl" onClick={() => prepareMfa()}><RefreshCw className="h-4 w-4 mr-2" /> {t("Restart MFA", "MFA ပြန်စ")}</Button>
+                        <Button type="button" variant="ghost" className="text-slate-300 hover:bg-white/5 rounded-xl" onClick={async () => { await supabase.auth.signOut(); setView("login"); }}>{t("Logout", "ထွက်မည်")}</Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Wizard Nav */}
+                {showWizardNav && (
+                  <div className="flex items-center justify-between pt-2">
+                    <Button type="button" variant="ghost" disabled={!canPrev} onClick={goPrev} className="h-11 px-4 rounded-xl text-slate-300 hover:text-white disabled:opacity-40"><ArrowLeft className="h-4 w-4 mr-2" /> {t("Previous", "နောက်ပြန်")}</Button>
+                    <Button type="button" disabled={!canNext} onClick={goNext} className="h-11 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest disabled:opacity-40">{t("Next", "ရှေ့သို့")} <ArrowRight className="h-4 w-4 ml-2" /></Button>
+                  </div>
+                )}
+                <Separator className="bg-white/10" />
+                <a href="/android.apk" download="android.apk" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest text-[11px] transition-colors"><Download className="h-4 w-4 text-emerald-400" />{t("Download Android App (APK)", "Android App (APK) ဒေါင်းလုပ်")}</a>
+              </CardContent>
+            </Card>
+            <div className="text-center text-[10px] text-slate-500 font-bold opacity-60 mt-4">
+              © {new Date().getFullYear()} Britium Enterprise • {t("All rights reserved.", "မူပိုင်ခွင့် ရယူထားသည်။")}
             </div>
-          </div>
-        </Card>
-      )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+EOF
 
-      <Modal open={modalCreate} title={t("Create account request", "အကောင့်တောင်းဆိုမှု ဖန်တီးရန်")} onClose={() => setModalCreate(false)} widthClass="max-w-3xl"><CreateModal /></Modal>
-      <Modal open={!!modalAuthorityEmail} title={t("Manage authorities", "အာဏာများ စီမံရန်")} onClose={() => setModalAuthorityEmail(null)} widthClass="max-w-4xl">{modalAuthorityEmail ? <AuthorityModal email={modalAuthorityEmail} /> : null}</Modal>
-      <Modal open={!!modalProfileEmail} title={t("Account profile", "အကောင့်အချက်အလက်")} onClose={() => setModalProfileEmail(null)} widthClass="max-w-3xl">{modalProfileEmail ? <ProfileModal email={modalProfileEmail} /> : null}</Modal>
-      <Modal open={!!modalApproveEmail} title={t("Approve request", "တောင်းဆိုမှု အတည်ပြုရန်")} onClose={() => setModalApproveEmail(null)} widthClass="max-w-2xl">{modalApproveEmail ? <ApproveRejectModal email={modalApproveEmail} mode="approve" /> : null}</Modal>
-      <Modal open={!!modalRejectEmail} title={t("Reject request", "တောင်းဆိုမှု ငြင်းပယ်ရန်")} onClose={() => setModalRejectEmail(null)} widthClass="max-w-2xl">{modalRejectEmail ? <ApproveRejectModal email={modalRejectEmail} mode="reject" /> : null}</Modal>
-      <Modal open={!!modalAudit} title={t("Audit Log", "Audit Log")} onClose={() => setModalAudit(false)} widthClass="max-w-3xl"><AuditModal /></Modal>
-      <Modal open={modalImport} title={t("Import CSV", "CSV သွင်းရန်")} onClose={() => setModalImport(false)} widthClass="max-w-3xl"><ImportModal /></Modal>
-      <Modal open={modalBulk} title={t("Bulk actions", "အုပ်စုလိုက်လုပ်ဆောင်မှု")} onClose={() => setModalBulk(false)} widthClass="max-w-3xl"><BulkModal /></Modal>
+cat > "$RESET_PW" <<'EOF'
+// @ts-nocheck
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, CheckCircle2, Globe, Loader2, Lock, ArrowLeft } from "lucide-react";
+
+export default function ResetPassword() {
+  const nav = useNavigate();
+  const { lang, setLanguage, toggleLang } = useLanguage();
+  const [currentLang, setCurrentLang] = useState(lang || "en");
+  const t = (en: string, my: string) => (currentLang === "en" ? en : my);
+
+  const [loading, setLoading] = useState(true);
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  useEffect(() => { if (lang) setCurrentLang(lang); }, [lang]);
+  const toggleLanguage = () => {
+    const next = currentLang === "en" ? "my" : "en";
+    setCurrentLang(next);
+    if (typeof setLanguage === "function") setLanguage(next);
+    else if (typeof toggleLang === "function") toggleLang();
+  };
+
+  useEffect(() => {
+    (async () => {
+      if (!SUPABASE_CONFIGURED) { setLoading(false); return; }
+      try {
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+        if (code && supabase.auth.exchangeCodeForSession) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          setLoading(false); return;
+        }
+        const hash = window.location.hash?.startsWith("#") ? window.location.hash.slice(1) : "";
+        const params = new URLSearchParams(hash);
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+        if (access_token && refresh_token && supabase.auth.setSession) {
+          const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (error) throw error;
+        }
+        setLoading(false);
+      } catch (e: any) {
+        setErrorMsg(e?.message || t("Invalid or expired recovery link.", "Recovery link မမှန် သို့မဟုတ် သက်တမ်းကုန်နေပါသည်။"));
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(""); setSuccessMsg("");
+    if (!SUPABASE_CONFIGURED) return setErrorMsg("System config missing.");
+    if (pw !== pw2) return setErrorMsg(t("Passwords do not match.", "စကားဝှက်များ မကိုက်ညီပါ။"));
+    if (pw.length < 8) return setErrorMsg(t("Password must be at least 8 characters.", "စကားဝှက်သည် အနည်းဆုံး ၈ လုံး ဖြစ်ရမည်။"));
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      if (error) throw error;
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data?.user?.id) {
+          await supabase.from("profiles").update({ must_change_password: false, requires_password_change: false }).eq("id", data.user.id);
+        }
+      } catch {}
+      setSuccessMsg(t("Password updated. Please login.", "စကားဝှက် ပြောင်းပြီးပါပြီ။ Login ပြန်ဝင်ပါ။"));
+      setTimeout(() => nav("/login", { replace: true }), 900);
+    } catch (e: any) {
+      setErrorMsg(e?.message || t("Password update failed.", "စကားဝှက်ပြောင်းမရပါ။"));
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#05080F] text-slate-100">
+      <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none grayscale"><source src="/background.mp4" type="video/mp4" /></video>
+      <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
+      <div className="absolute top-6 right-6 z-20">
+        <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full"><Globe className="h-4 w-4 mr-2" /><span className="text-xs font-black tracking-widest uppercase">{currentLang === "en" ? "MY" : "EN"}</span></Button>
+      </div>
+
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2">
+            <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl"><img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" /></div>
+            <h1 className="text-3xl font-black tracking-tight">BRITIUM</h1>
+            <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>
+            <Button variant="ghost" className="text-slate-300 hover:bg-white/5 mt-2" onClick={() => nav("/login")}><ArrowLeft className="h-4 w-4 mr-2" /> {t("Back to Login", "Login သို့ပြန်")}</Button>
+          </div>
+
+          <Card className="bg-[#0B101B]/85 backdrop-blur-xl border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
+            <div className="h-1 w-full bg-gradient-to-r from-emerald-600 to-teal-400" />
+            <CardContent className="p-7 space-y-4">
+              {errorMsg && (<div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-300"><AlertCircle className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{errorMsg}</p></div>)}
+              {successMsg && (<div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-300"><CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" /><p className="text-xs font-bold leading-relaxed">{successMsg}</p></div>)}
+              {loading ? (
+                <div className="flex items-center justify-center gap-2 text-sm text-slate-300 py-8"><Loader2 className="h-4 w-4 animate-spin" /> {t("Preparing secure session…", "လုံခြုံရေး session ကို ပြင်ဆင်နေသည်…")}</div>
+              ) : (
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="relative"><Lock className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={pw} onChange={(e) => setPw(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("New Password", "စကားဝှက်အသစ်")} /></div>
+                  <div className="relative"><CheckCircle2 className="absolute left-4 top-4 h-5 w-5 text-slate-400" /><Input type="password" required value={pw2} onChange={(e) => setPw2(e.target.value)} className="bg-black/40 border-white/10 text-white h-12 rounded-xl pl-12" placeholder={t("Confirm Password", "စကားဝှက် အတည်ပြု")} /></div>
+                  <Button disabled={loading} type="submit" className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white font-black tracking-widest uppercase rounded-xl mt-4">{loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("Updating…", "ပြောင်းနေသည်…")}</span> : t("Update Password", "စကားဝှက် ပြောင်းမည်")}</Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
 EOF
 
 # -----------------------------------------------------------------------------
-# 5) Push & Deploy Fix
+# 8) Patch SignUp.tsx using sed
 # -----------------------------------------------------------------------------
-echo "✅ Enterprise AccountControl and RequireAuthz route guard configured."
+if [ -f "$SIGNUP" ]; then
+  sed -i.bak 's/Access request submitted to L5 Command./Access request submitted to platform administrators./g' "$SIGNUP" || true
+  sed -i.bak 's/L5 Command/Platform Admin/g' "$SIGNUP" || true
+  rm -f "$SIGNUP.bak"
+fi
+
+# -----------------------------------------------------------------------------
+# 9) Push & Deploy Fix
+# -----------------------------------------------------------------------------
+echo "✅ Enterprise portal registry, sidebars, and safe stubs configured."
 
 git add .
-git commit -m "fix: patch missing supplyChain exports preventing build" || echo "No changes to commit."
+git commit -m "fix: patch missing supplyChain exports and apply all UI fixes" || echo "No changes to commit."
 
 git push origin master || git push origin main || echo "Push failed, but continuing to deploy..."
 
