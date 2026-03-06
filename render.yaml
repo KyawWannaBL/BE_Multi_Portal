@@ -1,0 +1,41 @@
+# ============================================
+# Render Blueprint (optional, production-ready)
+# NOTE: Put REAL secrets in Render Dashboard, NOT in git.
+# ============================================
+services:
+  - type: web
+    name: be-notify-receiver
+    runtime: node
+    plan: starter
+    region: singapore
+    rootDir: server/notify-receiver
+    buildCommand: npm ci --omit=dev
+    startCommand: node index.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8787"
+      - key: APP_BASE_URL
+        value: "[https://www.britiumexpress.com](https://www.britiumexpress.com)"
+      - key: SUPER_ADMIN_EMAILS
+        value: "md@britiumexpress.com,md@britiumventures.com"
+
+      # ⛔ DO NOT COMMIT REAL SECRETS
+      - key: NOTIFY_SECRET
+        value: "__REPLACE_ME__"
+      - key: ACTION_SECRET
+        value: "__REPLACE_ME__"
+
+      # SMTP
+      - key: SMTP_HOST
+        value: "mailpro-01.zth.netdesignhost.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        value: "admin@britiumexpress.com"
+      - key: SMTP_PASS
+        value: "__REPLACE_ME__"
+      - key: MAIL_FROM
+        value: "Britium Express <no-reply@britiumexpress.com>"

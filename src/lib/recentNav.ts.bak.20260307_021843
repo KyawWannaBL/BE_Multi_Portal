@@ -9,6 +9,9 @@ export function addRecentNav(item: Omit<RecentNavItem, "timestamp">) {
   const current = getRecentNav();
   const filtered = current.filter(x => x.path !== item.path);
   filtered.unshift({ ...item, timestamp: Date.now() });
-  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 8)));
+  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 5)));
 }
-export function clearRecentNav() { if (typeof window === "undefined") return; window.localStorage.removeItem(RECENT_NAV_KEY); }
+export function clearRecentNav() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(RECENT_NAV_KEY);
+}
