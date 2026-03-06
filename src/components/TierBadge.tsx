@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizeRole } from "@/lib/portalRegistry";
 
 export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
 
@@ -7,7 +8,7 @@ export function getTier(role?: string, tierLevel?: any): Tier {
   if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
   if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
 
-  const r = (role ?? "").toUpperCase();
+  const r = normalizeRole(role);
   if (["SYS", "APP_OWNER"].includes(r)) return "L5";
   if (["SUPER_ADMIN", "ADMIN", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
   if (r.includes("FINANCE") || r.includes("HR") || r.includes("MARKETING")) return "L3";
@@ -16,8 +17,8 @@ export function getTier(role?: string, tierLevel?: any): Tier {
   return "L1";
 }
 
-export default function TierBadge(props: { role?: string | null; tierLevel?: unknown; className?: string }) {
-  const tier = getTier(props.role || undefined, props.tierLevel);
+export default function TierBadge({ role, tierLevel, className }: { role?: string | null; tierLevel?: unknown; className?: string }) {
+  const tier = getTier(role || undefined, tierLevel);
 
   const colors: Record<Tier, string> = {
     L5: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
@@ -28,7 +29,7 @@ export default function TierBadge(props: { role?: string | null; tierLevel?: unk
   };
 
   return (
-    <span className={`inline-flex items-center h-8 px-3 rounded-full border text-[11px] font-black tracking-widest uppercase ${colors[tier]} ${props.className ?? ""}`} title={`Tier ${tier}`}>
+    <span className={`inline-flex items-center h-8 px-3 rounded-full border text-[11px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
       {tier}
     </span>
   );

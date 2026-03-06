@@ -151,8 +151,8 @@ export default function ResetPassword() {
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2">
-            <div className="mx-auto h-24 w-24 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
-              <img src="/logo.png" alt="Britium" className="h-16 w-16 object-contain" />
+            <div className="mx-auto h-28 w-28 rounded-2xl bg-black/40 border border-white/10 grid place-items-center overflow-hidden shadow-2xl">
+              <img src="/logo.png" alt="Britium" className="h-20 w-20 object-contain" />
             </div>
             <h1 className="text-3xl font-black tracking-tight">{brand.title}</h1>
             <p className="text-sm text-slate-300">{t("Reset password", "စကားဝှက် ပြန်လည်သတ်မှတ်")}</p>

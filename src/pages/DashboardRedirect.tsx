@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { defaultPortalForRole } from '@/lib/portalRegistry';
 
 export default function DashboardRedirect() {
   const { user, role, loading } = useAuth();
@@ -12,17 +13,7 @@ export default function DashboardRedirect() {
       navigate('/login', { replace: true });
       return;
     }
-    
-    const r = (role || 'GUEST').toUpperCase();
-    if (["SUPER_ADMIN", "APP_OWNER", "SYS", "SUPER_A"].includes(r)) {
-        navigate("/portal/admin/executive", { replace: true });
-    } else if (r.includes("FINANCE")) {
-        navigate("/portal/finance", { replace: true });
-    } else if (["RIDER", "DRIVER", "HELPER"].includes(r)) {
-        navigate("/portal/execution", { replace: true });
-    } else {
-        navigate("/portal/operations", { replace: true });
-    }
+    navigate(defaultPortalForRole(role), { replace: true });
   }, [user, role, loading, navigate]);
 
   return (

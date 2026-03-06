@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase, SUPABASE_CONFIGURED } from "@/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
+import { defaultPortalForRole, normalizeRole } from "@/lib/portalRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,27 +14,6 @@ import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Copy, Globe, Loader2,
 type View = "login" | "forgot" | "request" | "force_change" | "mfa";
 
 const MFA_REQUIRED_ROLES = new Set(["SYS", "APP_OWNER", "SUPER_ADMIN", "SUPER_A", "ADM", "MGR", "ADMIN"]);
-const EXEC_ROLES = new Set(["RIDER", "DRIVER", "HELPER"]);
-const FIN_ROLES = new Set(["FINANCE_USER", "FINANCE_STAFF", "FINANCE_ADMIN", "ACCOUNTANT"]);
-const OPS_ROLES = new Set([
-  "OPERATIONS_ADMIN", "STAFF", "DATA_ENTRY", "SUPERVISOR", 
-  "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER", "BRANCH_MANAGER", 
-  "ADM", "MGR", "SUPER_ADMIN", "SYS", "APP_OWNER"
-]);
-
-function normRole(role?: string) {
-  const r = (role ?? "").trim().toUpperCase();
-  if (!r) return "GUEST";
-  return r === "SUPER_A" ? "SUPER_ADMIN" : r;
-}
-
-function pathForRole(role?: string) {
-  const r = normRole(role);
-  if (FIN_ROLES.has(r)) return "/portal/finance";
-  if (OPS_ROLES.has(r)) return "/portal/operations";
-  if (EXEC_ROLES.has(r)) return "/portal/execution";
-  return "/portal/operations";
-}
 
 function supabaseReady() {
   return Boolean(SUPABASE_CONFIGURED);
@@ -56,7 +36,6 @@ async function loadProfile(userId: string) {
   const trySelect = async (sel: string) =>
     supabase.from("profiles").select(sel).eq("id", userId).maybeSingle();
 
-  // tolerate schema drift
   let { data, error } = await trySelect("id, role, role_code, app_role, user_role, must_change_password, requires_password_change");
   if (error && (error as any).code === "42703") {
     ({ data, error } = await trySelect("id, role, must_change_password"));
@@ -66,7 +45,7 @@ async function loadProfile(userId: string) {
   const row: any = data || {};
   const rawRole = row.role ?? row.app_role ?? row.user_role ?? row.role_code ?? "GUEST";
   const mustChange = Boolean(row.must_change_password) || Boolean(row.requires_password_change);
-  return { role: normRole(rawRole), mustChange };
+  return { role: normalizeRole(rawRole), mustChange };
 }
 
 async function hasAal2() {
@@ -95,10 +74,8 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [otp, setOtp] = useState("");
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -106,7 +83,6 @@ export default function Login() {
 
   const [targetPath, setTargetPath] = useState<string>("/");
 
-  // MFA state
   const [mfaStage, setMfaStage] = useState<"idle" | "enroll" | "verify">("idle");
   const [mfaFactorId, setMfaFactorId] = useState<string>("");
   const [mfaChallengeId, setMfaChallengeId] = useState<string>("");
@@ -143,13 +119,13 @@ export default function Login() {
 
   async function goAfterAuth(role?: string) {
     const from = loc?.state?.from;
-    const dst = (typeof from === "string" && from.startsWith("/")) ? from : pathForRole(role);
+    const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(role);
     setTargetPath(dst);
     nav(dst, { replace: true });
   }
 
   async function ensureMfa(role?: string) {
-    const r = normRole(role);
+    const r = normalizeRole(role);
     if (!MFA_REQUIRED_ROLES.has(r)) return true;
 
     const ok = await hasAal2();
@@ -254,7 +230,7 @@ export default function Login() {
 
         const prof = await loadProfile(userId);
         const from = loc?.state?.from;
-        const dst = (typeof from === "string" && from.startsWith("/")) ? from : pathForRole(prof.role);
+        const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(prof.role);
         setTargetPath(dst);
 
         if (prof.mustChange) {
@@ -262,7 +238,7 @@ export default function Login() {
           return;
         }
 
-        const need = MFA_REQUIRED_ROLES.has(normRole(prof.role));
+        const need = MFA_REQUIRED_ROLES.has(normalizeRole(prof.role));
         if (need) {
           const okAal = await hasAal2();
           if (!okAal) {
@@ -294,11 +270,11 @@ export default function Login() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      await auth.refresh();
+      await auth.refresh?.();
 
       const prof = await loadProfile(data.user.id);
       const from = loc?.state?.from;
-      const dst = (typeof from === "string" && from.startsWith("/")) ? from : pathForRole(prof.role);
+      const dst = (typeof from === "string" && from.startsWith("/")) ? from : defaultPortalForRole(prof.role);
       setTargetPath(dst);
 
       if (prof.mustChange) {
@@ -390,7 +366,7 @@ export default function Login() {
         await supabase.from("profiles").update({ must_change_password: false, requires_password_change: false }).eq("id", data.user.id);
       } catch {}
 
-      await auth.refresh();
+      await auth.refresh?.();
 
       const prof = await loadProfile(data.user.id);
 
@@ -419,10 +395,10 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#05080F] text-slate-100">
-      <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none grayscale">
+      <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
+      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none grayscale">
         <source src="/background.mp4" type="video/mp4" />
       </video>
-      <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(16,185,129,0.16),transparent_60%)]" />
 
       <div className="absolute top-6 right-6 z-20">
         <Button onClick={toggleLanguage} variant="outline" className="bg-black/40 border-white/10 text-slate-200 hover:bg-white/5 rounded-full">
@@ -765,7 +741,7 @@ export default function Login() {
                           className="text-slate-300 hover:bg-white/5 rounded-xl"
                           onClick={async () => {
                             await supabase.auth.signOut();
-                            await auth.refresh();
+                            await auth.refresh?.();
                             setView("login");
                           }}
                         >
