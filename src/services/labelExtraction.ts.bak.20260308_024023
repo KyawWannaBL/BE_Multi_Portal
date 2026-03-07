@@ -10,7 +10,19 @@ export type ExtractedLabel = {
   barcodeValue: string | null;
   ocrText: string;
   quality: ImageQualityResult;
+
+  criteriaPass: boolean;
+  criteriaIssues: string[];
 };
+
+function envStr(key: string, fallback = ""): string {
+  try { return String((import.meta as any)?.env?.[key] ?? fallback); } catch { return fallback; }
+}
+function envBool(key: string, fallback: boolean): boolean {
+  const v = envStr(key, "");
+  if (!v) return fallback;
+  return ["1","true","yes","on"].includes(v.toLowerCase());
+}
 
 function normalizePhone(s: string): string | null {
   const m = s.match(/(\+?95\s?9\d{7,9}|09\d{7,9})/);
@@ -21,7 +33,6 @@ function normalizePhone(s: string): string | null {
 function findAwb(text: string): string | null {
   const m = text.match(/(?:AWB|WAYBILL|WB|TT|Tracking)\s*[:#-]?\s*([A-Z0-9-]{6,})/i);
   if (m?.[1]) return m[1].toUpperCase();
-  // fallback: long alnum token
   const m2 = text.match(/\b([A-Z0-9]{10,})\b/);
   return m2?.[1] ? m2[1].toUpperCase() : null;
 }
@@ -35,9 +46,7 @@ function findCod(text: string): number | null {
 
 function guessReceiver(lines: string[]): string | null {
   for (const l of lines) {
-    if (l.length > 3 && l.length <= 40 && !/\d/.test(l) && !/address|awb|waybill|cod|phone/i.test(l)) {
-      return l;
-    }
+    if (l.length > 3 && l.length <= 40 && !/\d/.test(l) && !/address|awb|waybill|cod|phone/i.test(l)) return l;
   }
   return null;
 }
@@ -45,9 +54,7 @@ function guessReceiver(lines: string[]): string | null {
 function guessAddress(lines: string[]): string | null {
   const cleaned = lines.filter((l) => l.length >= 8);
   if (!cleaned.length) return null;
-  // take last 2-4 lines as address-ish
-  const last = cleaned.slice(-4).join(" ");
-  return last || null;
+  return cleaned.slice(-4).join(" ") || null;
 }
 
 async function decodeBarcodeFromImage(dataUrl: string): Promise<string | null> {
@@ -69,24 +76,34 @@ async function runOcr(dataUrl: string): Promise<string> {
 }
 
 /**
- * EN: Intake pipeline. Quality gate → barcode → OCR → parse.
- * MM: Quality စစ် → barcode/QR → OCR → parse
+ * EN: Intake pipeline.
+ * 1) Quality Gate
+ * 2) Barcode/QR decode
+ * 3) OCR (only if photo clear)
+ * 4) Parse fields
+ * 5) Apply criteria rules (strict)
  */
 export async function extractLabelFromImage(dataUrl: string): Promise<ExtractedLabel> {
+  const strictAwb = envBool("VITE_INTAKE_STRICT_AWB", true);
+  const requirePhoneOrAddress = envBool("VITE_INTAKE_REQUIRE_PHONE_OR_ADDRESS", true);
+
   const quality = await analyzeImageQuality(dataUrl);
   const barcodeValue = await decodeBarcodeFromImage(dataUrl);
 
   const ocrText = quality.pass ? await runOcr(dataUrl) : "";
-  const lines = ocrText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const lines = ocrText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  const awb = barcodeValue ? findAwb(barcodeValue) ?? barcodeValue : findAwb(ocrText);
+  const awb = barcodeValue ? (findAwb(barcodeValue) ?? barcodeValue) : findAwb(ocrText);
   const phone = normalizePhone(ocrText);
   const receiver = guessReceiver(lines);
   const address = guessAddress(lines);
   const codAmount = findCod(ocrText);
+
+  const criteriaIssues: string[] = [];
+  if (strictAwb && !awb) criteriaIssues.push("AWB_NOT_DETECTED");
+  if (requirePhoneOrAddress && !phone && !address) criteriaIssues.push("MISSING_PHONE_AND_ADDRESS");
+
+  const criteriaPass = criteriaIssues.length === 0;
 
   return {
     awb,
@@ -97,5 +114,7 @@ export async function extractLabelFromImage(dataUrl: string): Promise<ExtractedL
     barcodeValue,
     ocrText,
     quality,
+    criteriaPass,
+    criteriaIssues,
   };
 }

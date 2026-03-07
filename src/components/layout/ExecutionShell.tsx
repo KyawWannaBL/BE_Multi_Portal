@@ -1,47 +1,14 @@
-import React, { useMemo } from "react";
-import { NavLink } from "react-router-dom";
+import React from "react";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { useLanguage } from "@/contexts/LanguageContext";
-
-const base =
-  "block px-4 py-3 rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/5 text-sm font-semibold";
-
+import { NavLink } from "react-router-dom";
 export function ExecutionShell({ title, children }: { title: string; children: React.ReactNode }) {
-  const { lang } = useLanguage();
-  const t = (en: string, my: string) => (lang === "en" ? en : my);
-
-  const items = useMemo(
-    () => [
-      { to: "/portal/execution", label: t("Worklist", "လုပ်ငန်းစာရင်း") },
-      { to: "/portal/execution/intake", label: t("Parcel Intake (OCR)", "Parcel Intake (OCR)") },
-      { to: "/portal/execution/navigation", label: t("Mapbox Way Planning", "Mapbox လမ်းကြောင်းစီမံ") },
-      { to: "/portal/execution/live-map", label: t("Live Map View", "Live Map ကြည့်ရန်") },
-      { to: "/portal/execution/ocr-export", label: t("OCR → Excel", "OCR → Excel") },
-      { to: "/portal/execution/manual", label: t("QR Manual", "QR လမ်းညွှန်") },
-    ],
-    [lang]
-  );
-
+  const base = "block px-4 py-3 rounded-2xl border border-white/10 hover:bg-white/5 text-sm font-semibold";
   return (
     <PortalShell title={title}>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <aside className="lg:col-span-3">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-3 space-y-2 sticky top-[88px]">
-            <div className="text-[10px] font-mono text-white/60 tracking-widest uppercase px-2 py-1">
-              {t("Execution Menu", "Execution မီနူး")}
-            </div>
-            {items.map((i) => (
-              <NavLink
-                key={i.to}
-                to={i.to}
-                className={({ isActive }) =>
-                  `${base} ${isActive ? "bg-emerald-500/10 border-emerald-500/30" : ""}`
-                }
-              >
-                {i.label}
-              </NavLink>
-            ))}
-          </div>
+        <aside className="lg:col-span-3 space-y-2">
+          <NavLink to="/portal/execution" className={base}>Worklist</NavLink>
+          <NavLink to="/portal/execution/intake" className={base}>Parcel Intake (OCR)</NavLink>
         </aside>
         <section className="lg:col-span-9">{children}</section>
       </div>

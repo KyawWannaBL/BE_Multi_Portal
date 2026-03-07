@@ -1,6 +1,8 @@
-// @ts-nocheck
-export const isMapboxConfigured = Boolean(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN);
-export const geocodeForward = async (query: string) => null;
-export const fetchDirections = async (coordinates: [number, number][]) => ({ routes: [] });
-export const fetchOptimizedTripV1 = async (coordinates: [number, number][]) => ({ trips: [] });
-export type LngLat = { lng: number; lat: number };
+export async function geocodeForward(query: string) {
+  const t = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || "";
+  if (!t) throw new Error("Mapbox token missing");
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${t}&limit=1&country=MM`;
+  const res = await fetch(url);
+  const json = await res.json();
+  return json.features?.[0]?.center || null;
+}

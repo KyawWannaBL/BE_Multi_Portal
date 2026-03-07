@@ -7,9 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 const base =
   "block px-4 py-3 rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/5 text-sm font-semibold";
 
-function roleBucket(role?: string | null): "controller" | "staff" {
+function isController(role?: string | null) {
   const r = String(role ?? "").toUpperCase().trim();
-  const ctrl = new Set([
+  return [
     "WAREHOUSE_CONTROLLER",
     "WAREHOUSE_SUPERVISOR",
     "WH_CONTROLLER",
@@ -21,39 +21,36 @@ function roleBucket(role?: string | null): "controller" | "staff" {
     "SUPER_ADMIN",
     "SYS",
     "APP_OWNER",
-  ]);
-  return ctrl.has(r) ? "controller" : "staff";
+  ].includes(r);
 }
 
-export function WarehouseShell({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+export function WarehouseShell({ title, children }: { title: string; children: React.ReactNode }) {
   const { lang } = useLanguage();
   const { role } = useAuth();
   const t = (en: string, mm: string) => (lang === "en" ? en : mm);
 
-  const bucket = useMemo(() => roleBucket(role as any), [role]);
+  const ctrl = useMemo(() => isController(role as any), [role]);
 
   const items = useMemo(() => {
-    if (bucket === "controller") {
+    if (ctrl) {
       return [
-        { to: "/portal/warehouse/controller", label: t("Controller Dashboard", "Controller Dashboard") },
-        { to: "/portal/warehouse/controller?tab=TASKS", label: t("All Tasks", "Task အားလုံး") },
-        { to: "/portal/warehouse/controller?tab=ASSIGN", label: t("Assignments", "တာဝန်ခွဲခြား") },
-        { to: "/portal/warehouse/controller?tab=REPORTS", label: t("Reports", "အစီရင်ခံစာ") },
+        { to: "/portal/warehouse/controller", label: t("Dashboard", "Dashboard") },
+        { to: "/portal/warehouse/controller/tasks", label: t("Task Board", "Task Board") },
+        { to: "/portal/warehouse/controller/master", label: t("Master Data", "Master Data") },
+        { to: "/portal/warehouse/controller/inbound", label: t("Inbound", "Inbound") },
+        { to: "/portal/warehouse/controller/outbound", label: t("Outbound", "Outbound") },
+        { to: "/portal/warehouse/controller/inventory", label: t("Inventory", "Inventory") },
+        { to: "/portal/warehouse/controller/reports", label: t("Reports", "Reports") },
       ];
     }
 
     return [
       { to: "/portal/warehouse/staff", label: t("My Tasks", "မိမိ Task များ") },
-      { to: "/portal/warehouse/staff?tab=RECEIVING", label: t("Receiving", "လက်ခံယူခြင်း") },
-      { to: "/portal/warehouse/staff?tab=DISPATCH", label: t("Dispatch", "ပို့ထုတ်ခြင်း") },
+      { to: "/portal/warehouse/staff/inbound", label: t("Inbound Ops", "Inbound Ops") },
+      { to: "/portal/warehouse/staff/outbound", label: t("Outbound Ops", "Outbound Ops") },
+      { to: "/portal/warehouse/staff/cycle-count", label: t("Cycle Count", "Cycle Count") },
     ];
-  }, [bucket, lang]);
+  }, [ctrl, lang]);
 
   return (
     <PortalShell title={title}>
@@ -68,9 +65,7 @@ export function WarehouseShell({
               <NavLink
                 key={i.to}
                 to={i.to}
-                className={({ isActive }) =>
-                  `${base} ${isActive ? "bg-emerald-500/10 border-emerald-500/30" : ""}`
-                }
+                className={({ isActive }) => `${base} ${isActive ? "bg-emerald-500/10 border-emerald-500/30" : ""}`}
               >
                 {i.label}
               </NavLink>

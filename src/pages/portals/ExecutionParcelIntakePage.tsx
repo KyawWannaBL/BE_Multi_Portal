@@ -9,13 +9,12 @@ import PhotoCapture from "@/components/PhotoCapture";
 import { extractLabelFromImage, type ExtractedLabel } from "@/services/labelExtraction";
 import { geocodeForward, fetchDirections, isMapboxConfigured } from "@/services/mapbox";
 import ExecutionRoutePlannerMap, { type RouteStop } from "@/components/ExecutionRoutePlannerMap";
-import { uploadParcelsFromIntake, type IntakeUploadDefaults } from "@/services/intakeUploader";
 import * as XLSX from "xlsx";
-import { Download, Wand2, Trash2, Route, UploadCloud, CheckCircle2, XCircle } from "lucide-react";
+import { Download, Wand2, Trash2, Route, MapPin } from "lucide-react";
 
 type IntakeRow = {
   id: string;
-  image: string;
+  image: string; // base64
   extracted: ExtractedLabel | null;
   status: "PENDING" | "REJECTED" | "EXTRACTED";
   errors: string[];
@@ -27,12 +26,6 @@ type DeliveryRow = {
   phone: string;
   address: string;
   codAmount: number;
-  labelPhotoDataUrl?: string | null;
-
-  uploadStatus?: "READY" | "UPLOADING" | "UPLOADED" | "FAILED";
-  shipmentId?: string;
-  wayId?: string;
-  error?: string;
 };
 
 function uuid(): string {
@@ -43,30 +36,22 @@ function uuid(): string {
 function toDeliveryRows(items: IntakeRow[]): DeliveryRow[] {
   const rows: DeliveryRow[] = [];
   const seen = new Set<string>();
-
   for (const it of items) {
     const ex = it.extracted;
-    if (!ex) continue;
-    if (!ex.quality.pass) continue;
-    if (!ex.criteriaPass) continue;
-
+    if (!ex || !ex.quality.pass) continue;
     const awb = (ex.awb ?? "").trim();
-    if (!awb) continue;
-
-    if (seen.has(awb)) continue;
-    seen.add(awb);
+    const key = awb || `${ex.phone ?? ""}_${ex.receiver ?? ""}_${ex.address ?? ""}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
 
     rows.push({
-      awb,
+      awb: awb || "—",
       receiver: ex.receiver ?? "—",
       phone: ex.phone ?? "—",
       address: ex.address ?? "—",
       codAmount: Number(ex.codAmount ?? 0),
-      labelPhotoDataUrl: it.image,
-      uploadStatus: "READY",
     });
   }
-
   return rows;
 }
 
@@ -78,16 +63,6 @@ export default function ExecutionParcelIntakePage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [delivery, setDelivery] = useState<DeliveryRow[]>([]);
-  const [defaults, setDefaults] = useState<IntakeUploadDefaults>({
-    receiverCity: "Yangon",
-    receiverState: "MM",
-    deliveryType: "Normal",
-    deliveryFee: 0,
-    itemPrice: 0,
-    cbm: 1,
-    remarksPrefix: "INTAKE_OCR",
-  });
-
   const [stops, setStops] = useState<RouteStop[]>([]);
   const [routeGeom, setRouteGeom] = useState<any | null>(null);
   const [routeMeta, setRouteMeta] = useState<{ km: number; min: number } | null>(null);
@@ -98,17 +73,18 @@ export default function ExecutionParcelIntakePage() {
     const row: IntakeRow = { id, image: img, extracted: null, status: "PENDING", errors: [] };
     setItems((p) => [row, ...p]);
 
+    // auto: quality gate + extraction
     setBusyId(id);
     try {
       const ex = await extractLabelFromImage(img);
 
-      const hardIssues: string[] = [];
-      if (!ex.quality.pass) hardIssues.push(...ex.quality.issues);
-      if (!ex.criteriaPass) hardIssues.push(...ex.criteriaIssues);
-
-      if (hardIssues.length) {
+      if (!ex.quality.pass) {
         setItems((p) =>
-          p.map((r) => (r.id === id ? { ...r, extracted: ex, status: "REJECTED", errors: hardIssues } : r))
+          p.map((r) =>
+            r.id === id
+              ? { ...r, extracted: ex, status: "REJECTED", errors: ex.quality.issues }
+              : r
+          )
         );
         return;
       }
@@ -124,44 +100,34 @@ export default function ExecutionParcelIntakePage() {
   }
 
   function generateDeliveryList() {
-    setDelivery(toDeliveryRows(items));
+    const rows = toDeliveryRows(items);
+    setDelivery(rows);
   }
 
   function setDeliveryCell(i: number, k: keyof DeliveryRow, v: string) {
-    setDelivery((p) =>
-      p.map((r, idx) =>
-        idx === i
-          ? {
-              ...r,
-              [k]:
-                k === "codAmount"
-                  ? Number(v || 0)
-                  : v,
-            }
-          : r
-      )
-    );
+    setDelivery((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: k === "codAmount" ? Number(v || 0) : (v as any) } : r)));
   }
 
   function exportXlsx() {
-    const headers =
-      lang === "en"
-        ? ["AWB/WAYBILL", "RECEIVER", "PHONE", "ADDRESS", "COD", "SHIPMENT_ID", "WAY_ID"]
-        : ["AWB/WAYBILL", "လက်ခံသူ", "ဖုန်း", "လိပ်စာ", "COD", "SHIPMENT_ID", "WAY_ID"];
+    const headers = lang === "en"
+      ? ["AWB/WAYBILL", "RECEIVER", "PHONE", "ADDRESS", "COD"]
+      : ["AWB/WAYBILL", "လက်ခံသူ", "ဖုန်း", "လိပ်စာ", "COD"];
 
     const aoa = [
       headers,
-      ...delivery.map((r) => [r.awb, r.receiver, r.phone, r.address, r.codAmount, r.shipmentId ?? "", r.wayId ?? ""]),
+      ...delivery.map((r) => [r.awb, r.receiver, r.phone, r.address, r.codAmount]),
     ];
 
     const sheet = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, sheet, "DELIVERY_LIST");
-    XLSX.writeFile(wb, `delivery_list_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `delivery_list_${new Date().toISOString().slice(0,10)}.xlsx`);
   }
 
   async function geocodeAndPlanRoute() {
-    if (!delivery.length || !isMapboxConfigured()) return;
+    if (!delivery.length) return;
+    if (!isMapboxConfigured()) return;
+
     setPlanning(true);
     try {
       const nextStops: RouteStop[] = [];
@@ -170,14 +136,21 @@ export default function ExecutionParcelIntakePage() {
         if (!q || q === "—") continue;
         const feats = await geocodeForward(q, { limit: 1, country: "MM" });
         const c = feats?.[0]?.center;
-        if (c) nextStops.push({ id: r.awb, label: `${r.awb} • ${r.receiver}`, coord: c });
+        if (c) {
+          nextStops.push({
+            id: r.awb,
+            label: `${r.awb} • ${r.receiver}`,
+            coord: c,
+          });
+        }
       }
       setStops(nextStops);
 
       if (nextStops.length >= 2) {
+        const coords = nextStops.map((s) => s.coord);
         const route = await fetchDirections({
           profile: "driving",
-          coordinates: nextStops.map((s) => s.coord),
+          coordinates: coords,
           geometries: "geojson",
           overview: "full",
         });
@@ -192,95 +165,14 @@ export default function ExecutionParcelIntakePage() {
     }
   }
 
-  async function uploadToSystem() {
-    if (!delivery.length) return;
-
-    setDelivery((p) => p.map((r) => ({ ...r, uploadStatus: "UPLOADING", error: "" })));
-
-    const results = await uploadParcelsFromIntake(
-      delivery.map((r) => ({
-        awb: r.awb,
-        receiver: r.receiver,
-        phone: r.phone,
-        address: r.address,
-        codAmount: r.codAmount,
-        labelPhotoDataUrl: r.labelPhotoDataUrl ?? null,
-      })),
-      defaults
-    );
-
-    setDelivery((prev) =>
-      prev.map((r) => {
-        const rr = results.find((x) => x.awb === r.awb);
-        if (!rr) return r;
-        if (rr.ok) {
-          return { ...r, uploadStatus: "UPLOADED", shipmentId: rr.shipmentId, wayId: rr.wayId, error: "" };
-        }
-        return { ...r, uploadStatus: "FAILED", error: rr.error ?? "FAILED" };
-      })
-    );
-  }
-
-  const extractedCount = useMemo(() => items.filter((x) => x.status === "EXTRACTED").length, [items]);
-  const rejectedCount = useMemo(() => items.filter((x) => x.status === "REJECTED").length, [items]);
-
   return (
-    <ExecutionShell title={t("Parcel Intake (OCR + Upload + Route)", "Parcel Intake (OCR + Upload + Route)")}>
+    <ExecutionShell title={t("Parcel Intake (OCR + Route)", "Parcel Intake (OCR + Route)")}>
       <div className="space-y-4">
         <Card className="bg-white/5 border-white/10">
-          <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-black tracking-widest uppercase">
-              {t("Fundamental: clear label photos -> auto create parcels", "အခြေခံ: clear label ပုံ -> parcel auto create")}
-            </div>
+          <CardContent className="p-4 space-y-1">
+            <div className="text-sm font-black tracking-widest uppercase">{t("Fundamental: photo → extract → list → plan", "အခြေခံ: ပုံ → extract → စာရင်း → route")}</div>
             <div className="text-xs text-white/60">
-              {t(
-                "System auto-rejects unclear photos and requires AWB detection.",
-                "စနစ်က မရှင်းလင်းသော ပုံများကို auto-reject လုပ်ပြီး AWB detect လိုအပ်ပါသည်။"
-              )}
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-500/10">
-                {extractedCount} {t("extracted", "extracted")}
-              </Badge>
-              <Badge variant="outline" className="border-rose-500/30 text-rose-300 bg-rose-500/10">
-                {rejectedCount} {t("rejected", "rejected")}
-              </Badge>
-              <Badge variant="outline" className={isMapboxConfigured() ? "border-emerald-500/30 text-emerald-300" : "border-amber-500/30 text-amber-300"}>
-                MAPBOX {isMapboxConfigured() ? "OK" : "MISSING TOKEN"}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Defaults */}
-        <Card className="bg-[#05080F] border-white/10">
-          <CardContent className="p-4 space-y-3">
-            <div className="text-xs font-mono text-white/60 tracking-widest uppercase">{t("Upload defaults", "Upload defaults")}</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">{t("City", "မြို့")}</div>
-                <Input className="bg-black/30 border-white/10" value={defaults.receiverCity} onChange={(e) => setDefaults((p) => ({ ...p, receiverCity: e.target.value }))} />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">{t("State", "ပြည်နယ်/တိုင်း")}</div>
-                <Input className="bg-black/30 border-white/10" value={defaults.receiverState} onChange={(e) => setDefaults((p) => ({ ...p, receiverState: e.target.value }))} />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">{t("Delivery type", "Delivery type")}</div>
-                <Input className="bg-black/30 border-white/10" value={defaults.deliveryType} onChange={(e) => setDefaults((p) => ({ ...p, deliveryType: e.target.value }))} />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">{t("Delivery fee", "ပို့ခ")}</div>
-                <Input className="bg-black/30 border-white/10" value={String(defaults.deliveryFee)} onChange={(e) => setDefaults((p) => ({ ...p, deliveryFee: Number(e.target.value || 0) }))} />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">{t("Item price", "ပစ္စည်းတန်ဖိုး")}</div>
-                <Input className="bg-black/30 border-white/10" value={String(defaults.itemPrice)} onChange={(e) => setDefaults((p) => ({ ...p, itemPrice: Number(e.target.value || 0) }))} />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-white/50 tracking-widest uppercase">CBM</div>
-                <Input className="bg-black/30 border-white/10" value={String(defaults.cbm)} onChange={(e) => setDefaults((p) => ({ ...p, cbm: Number(e.target.value || 1) }))} />
-              </div>
+              {t("System auto-rejects unclear photos and only extracts from clear labels.", "စနစ်က မရှင်းလင်းသော ပုံများကို auto-reject လုပ်ပြီး clear label များမှသာ extract လုပ်မည်။")}
             </div>
           </CardContent>
         </Card>
@@ -290,44 +182,38 @@ export default function ExecutionParcelIntakePage() {
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="text-xs font-mono text-white/60 tracking-widest uppercase">{t("Capture label photo", "Label ပုံရိုက်ရန်")}</div>
-              {busyId ? <Badge variant="outline" className="border-amber-500/30 text-amber-300 bg-amber-500/10">processing…</Badge> : null}
+              <Badge variant="outline" className="border-white/10 text-white/70">{items.length} photos</Badge>
             </div>
 
             <PhotoCapture
               onCapture={handleCapture}
-              watermarkData={{ ttId: "INTAKE", userId: "exec", timestamp: new Date().toISOString(), gps: "auto" }}
+              watermarkData={{
+                ttId: "INTAKE",
+                userId: "exec",
+                timestamp: new Date().toISOString(),
+                gps: "auto",
+              }}
               required={true}
             />
 
-            <div className="flex gap-2 flex-wrap">
-              <Button className="bg-sky-600 hover:bg-sky-500" onClick={generateDeliveryList}>
-                <Wand2 className="h-4 w-4 mr-2" /> {t("Generate Delivery List", "Delivery List ထုတ်")}
-              </Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-500" disabled={!delivery.length} onClick={uploadToSystem}>
-                <UploadCloud className="h-4 w-4 mr-2" /> {t("Upload to System", "System သို့ တင်")}
-              </Button>
-              <Button variant="outline" className="border-white/10" disabled={!delivery.length} onClick={exportXlsx}>
-                <Download className="h-4 w-4 mr-2" /> {t("Export Excel", "Excel ထုတ်")}
-              </Button>
-              <Button className="bg-amber-600 hover:bg-amber-500" disabled={!delivery.length || !isMapboxConfigured() || planning} onClick={() => void geocodeAndPlanRoute()}>
-                <Route className="h-4 w-4 mr-2" /> {planning ? "planning…" : t("Plan Route", "Route စီမံ")}
-              </Button>
+            <div className="text-xs text-white/40">
+              {t("Quality gate checks: resolution, blur, brightness, contrast.", "Quality စစ်ချက်: resolution, blur, brightness, contrast.")}
             </div>
-
-            {!isMapboxConfigured() ? (
-              <div className="text-xs text-rose-300">
-                {t("Set VITE_MAPBOX_ACCESS_TOKEN to enable route planning.", "Route planning အတွက် VITE_MAPBOX_ACCESS_TOKEN ထည့်ပါ။")}
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
-        {/* Intake results */}
+        {/* Intake items */}
         <Card className="bg-[#05080F] border-white/10">
           <CardContent className="p-0">
-            <div className="p-4 border-b border-white/10 text-xs font-mono text-white/60 tracking-widest uppercase">
-              {t("Intake results", "Intake results")} ({items.length})
+            <div className="p-4 border-b border-white/10 flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs font-mono text-white/60 tracking-widest uppercase">{t("Intake results", "Intake results")}</div>
+              <div className="flex gap-2">
+                <Button className="bg-sky-600 hover:bg-sky-500" onClick={generateDeliveryList}>
+                  <Wand2 className="h-4 w-4 mr-2" /> {t("Generate Delivery List", "Delivery List ထုတ်")}
+                </Button>
+              </div>
             </div>
+
             <div className="divide-y divide-white/5">
               {items.length === 0 ? (
                 <div className="p-6 text-sm text-white/60">{t("No photos yet.", "ပုံမရှိသေးပါ။")}</div>
@@ -342,31 +228,26 @@ export default function ExecutionParcelIntakePage() {
                       <div className="flex gap-3 min-w-[260px]">
                         <img src={it.image} alt="label" className="w-[140px] h-[100px] object-cover rounded-xl border border-white/10 bg-black" />
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className={it.status === "EXTRACTED" ? "border-emerald-500/30 text-emerald-300 bg-emerald-500/10" : it.status === "REJECTED" ? "border-rose-500/30 text-rose-300 bg-rose-500/10" : "border-amber-500/30 text-amber-300 bg-amber-500/10"}>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={pass ? "border-emerald-500/30 text-emerald-300 bg-emerald-500/10" : "border-rose-500/30 text-rose-300 bg-rose-500/10"}>
                               {it.status}
                             </Badge>
+                            {busyId === it.id ? <Badge variant="outline" className="border-amber-500/30 text-amber-300 bg-amber-500/10">processing…</Badge> : null}
                             <Badge variant="outline" className="border-white/10 text-white/70">score {score}</Badge>
                           </div>
 
-                          {it.status === "REJECTED" && ex ? (
+                          {!pass && ex ? (
                             <div className="text-xs text-rose-300">
-                              {t("Rejected:", "Rejected:")} {it.errors.join(", ")}
+                              {t("Auto rejected:", "Auto rejected:")} {ex.quality.issues.join(", ")}
                             </div>
                           ) : null}
 
-                          {it.status === "EXTRACTED" && ex ? (
+                          {pass && ex ? (
                             <div className="text-xs text-white/70 space-y-1">
                               <div>AWB: <span className="text-white">{ex.awb ?? "—"}</span></div>
                               <div>{t("Phone", "ဖုန်း")}: <span className="text-white">{ex.phone ?? "—"}</span></div>
                               <div>{t("Receiver", "လက်ခံသူ")}: <span className="text-white">{ex.receiver ?? "—"}</span></div>
                               <div className="text-white/60 line-clamp-2">{t("Address", "လိပ်စာ")}: {ex.address ?? "—"}</div>
-                            </div>
-                          ) : null}
-
-                          {!pass && ex ? (
-                            <div className="text-[10px] text-white/40 font-mono">
-                              blur={ex.quality.metrics.blurVariance.toFixed(1)} • bright={ex.quality.metrics.brightnessMean.toFixed(1)} • contrast={ex.quality.metrics.contrastStd.toFixed(1)}
                             </div>
                           ) : null}
                         </div>
@@ -383,12 +264,28 @@ export default function ExecutionParcelIntakePage() {
           </CardContent>
         </Card>
 
-        {/* Delivery list */}
+        {/* Delivery list table */}
         <Card className="bg-[#05080F] border-white/10">
           <CardContent className="p-4 space-y-3">
-            <div className="text-xs font-mono text-white/60 tracking-widest uppercase">
-              {t("Delivery list (editable)", "Delivery list (editable)")} ({delivery.length})
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs font-mono text-white/60 tracking-widest uppercase">
+                {t("Delivery list", "Delivery list")} <span className="text-white/40">({delivery.length})</span>
+              </div>
+              <div className="flex gap-2">
+                <Button className="bg-emerald-600 hover:bg-emerald-500" disabled={!delivery.length} onClick={exportXlsx}>
+                  <Download className="h-4 w-4 mr-2" /> {t("Export Excel", "Excel ထုတ်")}
+                </Button>
+                <Button className="bg-amber-600 hover:bg-amber-500" disabled={!delivery.length || !isMapboxConfigured() || planning} onClick={() => void geocodeAndPlanRoute()}>
+                  <Route className="h-4 w-4 mr-2" /> {planning ? "planning…" : t("Plan Route", "Route စီမံ")}
+                </Button>
+              </div>
             </div>
+
+            {!isMapboxConfigured() ? (
+              <div className="text-xs text-rose-300">
+                {t("Mapbox token missing. Set VITE_MAPBOX_ACCESS_TOKEN.", "Mapbox token မရှိပါ။ VITE_MAPBOX_ACCESS_TOKEN ထည့်ပါ။")}
+              </div>
+            ) : null}
 
             <div className="overflow-auto rounded-2xl border border-white/10">
               <table className="w-full text-left text-sm">
@@ -399,7 +296,6 @@ export default function ExecutionParcelIntakePage() {
                     <th className="p-3 text-xs font-mono tracking-widest uppercase">{t("Phone", "ဖုန်း")}</th>
                     <th className="p-3 text-xs font-mono tracking-widest uppercase">{t("Address", "လိပ်စာ")}</th>
                     <th className="p-3 text-xs font-mono tracking-widest uppercase">COD</th>
-                    <th className="p-3 text-xs font-mono tracking-widest uppercase">{t("Upload", "Upload")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
@@ -411,29 +307,10 @@ export default function ExecutionParcelIntakePage() {
                         <td className="p-2"><Input className="bg-black/30 border-white/10" value={r.phone} onChange={(e) => setDeliveryCell(i, "phone", e.target.value)} /></td>
                         <td className="p-2"><Input className="bg-black/30 border-white/10" value={r.address} onChange={(e) => setDeliveryCell(i, "address", e.target.value)} /></td>
                         <td className="p-2"><Input className="bg-black/30 border-white/10" value={String(r.codAmount)} onChange={(e) => setDeliveryCell(i, "codAmount", e.target.value)} /></td>
-                        <td className="p-2">
-                          {r.uploadStatus === "UPLOADED" ? (
-                            <div className="flex items-center gap-2 text-emerald-300">
-                              <CheckCircle2 className="h-4 w-4" />
-                              <span className="text-xs font-mono">OK</span>
-                            </div>
-                          ) : r.uploadStatus === "FAILED" ? (
-                            <div className="text-rose-300 text-xs">
-                              <div className="flex items-center gap-2"><XCircle className="h-4 w-4" /> FAILED</div>
-                              <div className="text-[10px] opacity-80">{r.error}</div>
-                            </div>
-                          ) : r.uploadStatus === "UPLOADING" ? (
-                            <div className="text-amber-300 text-xs font-mono">UPLOADING…</div>
-                          ) : (
-                            <div className="text-white/60 text-xs font-mono">READY</div>
-                          )}
-                          {r.shipmentId ? <div className="text-[10px] text-white/50 font-mono">shipment={r.shipmentId}</div> : null}
-                          {r.wayId ? <div className="text-[10px] text-white/50 font-mono">way={r.wayId}</div> : null}
-                        </td>
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={6} className="p-6 text-white/60">{t("Generate from clear photos above.", "အပေါ်က clear ပုံများမှ စာရင်းထုတ်ပါ။")}</td></tr>
+                    <tr><td colSpan={5} className="p-6 text-white/60">{t("Generate list from clear photos above.", "အပေါ်က clear ပုံများမှ စာရင်းထုတ်ပါ။")}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -441,11 +318,14 @@ export default function ExecutionParcelIntakePage() {
           </CardContent>
         </Card>
 
-        {/* Route preview */}
+        {/* Map route */}
         <Card className="bg-[#05080F] border-white/10">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="text-xs font-mono text-white/60 tracking-widest uppercase">{t("Route preview", "Route preview")}</div>
+              <div className="text-xs font-mono text-white/60 tracking-widest uppercase">
+                <MapPin className="inline h-4 w-4 mr-2" />
+                {t("Route preview", "Route preview")}
+              </div>
               {routeMeta ? (
                 <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-500/10">
                   {routeMeta.km} km • {routeMeta.min} min
@@ -454,6 +334,7 @@ export default function ExecutionParcelIntakePage() {
                 <Badge variant="outline" className="border-white/10 text-white/60">—</Badge>
               )}
             </div>
+
             <ExecutionRoutePlannerMap stops={stops} routeGeometry={routeGeom} className="rounded-3xl border border-white/10 overflow-hidden" />
           </CardContent>
         </Card>

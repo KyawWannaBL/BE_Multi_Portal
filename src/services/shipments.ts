@@ -16,3 +16,37 @@ export const markDeliveryFailed = async (id: string, data: any) => {
 };
 
 export type Shipment = { id: string; way_id?: string; tracking_number?: string; status?: string; };
+
+export async function markDeliveryFailed(shipmentId: string, payload: any) {
+  const { supabase } = await import("@/lib/supabase");
+  const { data, error } = await supabase
+    .from("shipments")
+    .update({
+      status: "NDR",
+      updated_at: payload.at || new Date().toISOString(),
+      delivery_note: payload.note || "Delivery failed", 
+    })
+    .eq("id", shipmentId)
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Mark a shipment as delivery failed (NDR)
+ */
+export async function markDeliveryFailed(shipmentId: string, payload: any) {
+  const { supabase } = await import("@/lib/supabase");
+  const { data, error } = await supabase
+    .from("shipments")
+    .update({
+      status: "NDR",
+      updated_at: payload.at || new Date().toISOString(),
+      delivery_note: payload.note || "Delivery failed", 
+    })
+    .eq("id", shipmentId)
+    .select().single();
+
+  if (error) throw error;
+  return data;
+}

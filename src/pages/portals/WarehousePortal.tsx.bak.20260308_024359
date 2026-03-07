@@ -1,10 +1,10 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { PortalShell } from "@/components/layout/PortalShell";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { PortalShell } from "@/components/layout/PortalShell";
 
-function isControllerRole(role?: string | null) {
+function isController(role?: string | null) {
   const r = String(role ?? "").toUpperCase().trim();
   return [
     "WAREHOUSE_CONTROLLER",
@@ -28,8 +28,7 @@ export default function WarehousePortal() {
   const t = (en: string, mm: string) => (lang === "en" ? en : mm);
 
   useEffect(() => {
-    const to = isControllerRole(role as any) ? "/portal/warehouse/controller" : "/portal/warehouse/staff";
-    nav(to, { replace: true });
+    nav(isController(role as any) ? "/portal/warehouse/controller" : "/portal/warehouse/staff", { replace: true });
   }, [role]);
 
   return (
