@@ -1,65 +1,59 @@
-// @ts-nocheck
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { loadStore, getAccountByEmail, roleIsPrivileged, effectivePermissions } from "@/lib/accountControlStore";
+import { loadStore, getAccountByEmail, roleIsPrivileged } from "@/lib/accountControlStore";
 import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
 import { hasAnyPermission } from "@/lib/permissionResolver";
 
-type Rule = { prefix: string; required?: string[] };
+export default function RequireAuthz() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
 
-function collectRules(): Rule[] {
-  const rules: Rule[] = [];
-  const walk = (item: NavItem, inherited?: string[]) => {
-    const req = (item.requiredPermissions && item.requiredPermissions.length ? item.requiredPermissions : inherited) ?? inherited;
-    rules.push({ prefix: item.path, required: req });
-    for (const c of item.children ?? []) walk(c, req);
-  };
-  for (const sec of NAV_SECTIONS) for (const it of sec.items) walk(it);
-  rules.sort((a, b) => b.prefix.length - a.prefix.length);
-  return rules;
-}
+  useEffect(() => {
+    async function checkAuth() {
+      if (!user?.email) {
+        setAuthorized(false);
+        return;
+      }
+      
+      const store = await loadStore();
+      const account = getAccountByEmail(store, user.email);
+      
+      if (!account || account.status !== "ACTIVE") {
+        setAuthorized(false);
+        return;
+      }
 
-function requiredForPath(pathname: string, rules: Rule[]): string[] | null {
-  const p = pathname || "/";
-  for (const r of rules) {
-    if (!r.required || r.required.length === 0) continue;
-    if (p === r.prefix) return r.required;
-    if (p.startsWith(r.prefix.endsWith("/") ? r.prefix : r.prefix + "/")) return r.required;
-  }
-  return null;
-}
+      // Allow privileged roles anywhere
+      if (roleIsPrivileged(account.role)) {
+        setAuthorized(true);
+        return;
+      }
 
-export function RequireAuthz() {
-  const auth = useAuth() as any;
-  const loc = useLocation();
+      // Find the required permissions for the current route
+      const allNavItems = NAV_SECTIONS.flatMap(section => section.items);
+      const currentRoute = allNavItems.find(item => location.pathname.startsWith(item.href));
 
-  const email = (auth?.user?.email ?? "") as string;
-  const isAuthed = Boolean(auth?.user?.id || email);
-
-  const rules = useMemo(() => collectRules(), []);
-  const required = useMemo(() => requiredForPath(loc.pathname, rules), [loc.pathname, rules]);
-
-  if (!isAuthed) return <Navigate to="/login" replace state={{ from: loc.pathname, reason: "NO_SESSION" }} />;
-
-  const store = typeof window !== "undefined" ? loadStore() : null;
-  const actor = store && email ? getAccountByEmail(store.accounts, email) : undefined;
-
-  if (!actor) return <Navigate to="/unauthorized" replace state={{ reason: "NOT_REGISTERED", detail: "User not in AccountControl registry" }} />;
-  if (actor.status !== "ACTIVE") return <Navigate to="/unauthorized" replace state={{ reason: "NOT_ACTIVE", detail: `Account status: ${actor.status}` }} />;
-  if (roleIsPrivileged(actor.role) || roleIsPrivileged(auth?.role)) return <Outlet />;
-
-  if (required && required.length) {
-    const ok = hasAnyPermission(auth, required);
-    if (!ok && store) {
-      const perms = effectivePermissions(store, actor);
-      const requiredSet = new Set(required.map((x) => String(x)));
-      let ok2 = false;
-      for (const g of perms) if (requiredSet.has(String(g))) ok2 = true;
-      if (!ok2) return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
-    } else if (!ok) {
-      return <Navigate to="/unauthorized" replace state={{ reason: "NO_PERMISSION", detail: `Missing permissions: ${required.join(", ")}` }} />;
+      if (currentRoute && currentRoute.requiredPermissions) {
+        // Use the resolver to check if the role has the needed permissions
+        const hasAccess = hasAnyPermission(account.role, currentRoute.requiredPermissions);
+        setAuthorized(hasAccess);
+      } else {
+        // If no specific permissions are defined for the route, allow access
+        setAuthorized(true);
+      }
     }
+    
+    checkAuth();
+  }, [user, location.pathname]);
+
+  if (authorized === null) {
+    return <div className="p-8 text-center text-gray-500">Checking authorization...</div>;
+  }
+
+  if (!authorized) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <Outlet />;
