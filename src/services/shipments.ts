@@ -15,9 +15,6 @@ export type Shipment = {
   updatedAt?: string | null;
 };
 
-/**
- * Existing API (kept): create shipment via RPC.
- */
 export async function createShipment(input: {
   sender_name?: string;
   sender_phone?: string;
@@ -78,17 +75,15 @@ export async function createShipmentDataEntry(input: Parameters<typeof createShi
 
 function mapShipmentRow(row: any): Shipment {
   return {
-    id: String(row?.id ?? row?.shipment_id ?? row?.shipmentId ?? ""),
-    wayId: row?.way_id ?? row?.wayId ?? null,
-    trackingNumber: row?.tracking_number ?? row?.trackingNumber ?? row?.awb ?? row?.way_id ?? null,
+    id: String(row?.id ?? row?.shipment_id ?? ""),
+    wayId: row?.way_id ?? null,
+    trackingNumber: row?.tracking_number ?? row?.awb ?? row?.way_id ?? null,
     status: row?.status ?? null,
-
-    receiverName: row?.receiver_name ?? row?.receiverName ?? null,
-    receiverPhone: row?.receiver_phone ?? row?.receiverPhone ?? null,
-    receiverAddress: row?.receiver_address ?? row?.receiverAddress ?? null,
-
-    codAmount: typeof row?.cod_amount === "number" ? row.cod_amount : row?.codAmount ?? null,
-    updatedAt: row?.updated_at ?? row?.updatedAt ?? null,
+    receiverName: row?.receiver_name ?? null,
+    receiverPhone: row?.receiver_phone ?? null,
+    receiverAddress: row?.receiver_address ?? null,
+    codAmount: typeof row?.cod_amount === "number" ? row.cod_amount : row?.cod_amount ? Number(row.cod_amount) : null,
+    updatedAt: row?.updated_at ?? null,
   };
 }
 
@@ -96,33 +91,22 @@ async function currentActor() {
   try {
     const { data } = await supabase.auth.getSession();
     const u = data?.session?.user;
-    return { userId: u?.id ?? null, email: u?.email ?? null, role: (u?.app_metadata as any)?.role ?? (u?.user_metadata as any)?.role ?? null };
+    return {
+      userId: u?.id ?? null,
+      email: u?.email ?? null,
+      role: (u?.app_metadata as any)?.role ?? (u?.user_metadata as any)?.role ?? null,
+    };
   } catch {
     return { userId: null, email: null, role: null };
   }
 }
 
 /**
- * Enterprise: list shipments assigned to current executor (schema-resilient).
+ * EN: Enterprise rider worklist, schema-resilient.
+ * MY: Rider worklist ကို schema မတူနိုင်လို့ columns အမျိုးမျိုး စမ်းပြီးရယူမည်။
  */
 export async function listAssignedShipments(): Promise<Shipment[]> {
-  if (!isSupabaseConfigured) {
-    try {
-      const mod = await import("@/data/mockData");
-      const rows = (mod as any).mockShipments ?? [];
-      return rows.map((r: any) =>
-        mapShipmentRow({
-          id: r.id,
-          tracking_number: r.trackingNumber,
-          status: r.status,
-          receiver_name: r.receiverName,
-          receiver_address: r.receiverAddress,
-        })
-      );
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured) return [];
 
   const actor = await currentActor();
   const userId = actor.userId;
@@ -130,41 +114,31 @@ export async function listAssignedShipments(): Promise<Shipment[]> {
 
   const selects = [
     "id,way_id,tracking_number,status,receiver_name,receiver_phone,receiver_address,cod_amount,updated_at",
-    "id,way_id,status,receiver_name,receiver_phone,receiver_address,updated_at",
     "*",
   ];
 
-  // Try likely assignment columns by user id
   const idCols = ["assigned_to", "assigned_rider_id", "executor_id", "rider_id", "assigned_user_id"];
   for (const sel of selects) {
     for (const col of idCols) {
-      try {
-        if (!userId) continue;
-        const res = await supabase.from("shipments").select(sel).eq(col as any, userId).order("updated_at", { ascending: false }).limit(200);
-        if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
-      } catch {}
+      if (!userId) continue;
+      const res = await supabase.from("shipments").select(sel).eq(col as any, userId).order("updated_at", { ascending: false }).limit(250);
+      if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
     }
   }
 
-  // Try assignment columns by email
   const emailCols = ["assigned_email", "rider_email", "executor_email"];
   for (const sel of selects) {
     for (const col of emailCols) {
-      try {
-        if (!email) continue;
-        const res = await supabase.from("shipments").select(sel).eq(col as any, email).order("updated_at", { ascending: false }).limit(200);
-        if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
-      } catch {}
+      if (!email) continue;
+      const res = await supabase.from("shipments").select(sel).eq(col as any, email).order("updated_at", { ascending: false }).limit(250);
+      if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
     }
   }
 
-  // Fallback: actionable statuses
   const fallbackStatuses = ["OUT_FOR_DELIVERY", "PICKED_UP", "IN_TRANSIT", "DELIVERY_FAILED_NDR"];
   for (const sel of selects) {
-    try {
-      const res = await supabase.from("shipments").select(sel).in("status" as any, fallbackStatuses as any).order("updated_at", { ascending: false }).limit(200);
-      if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
-    } catch {}
+    const res = await supabase.from("shipments").select(sel).in("status" as any, fallbackStatuses as any).order("updated_at", { ascending: false }).limit(250);
+    if (!res.error && Array.isArray(res.data)) return res.data.map(mapShipmentRow);
   }
 
   return [];
@@ -172,19 +146,16 @@ export async function listAssignedShipments(): Promise<Shipment[]> {
 
 async function transitionShipmentBestEffort(shipmentId: string, nextStatusCandidates: string[]) {
   for (const status of nextStatusCandidates) {
-    // 1) RPC transition
     try {
       const rpc = await supabase.rpc("transition_shipment", { p_shipment_id: shipmentId, p_next_status: status });
       if (!rpc.error) return;
     } catch {}
 
-    // 2) direct update
     try {
       const upd = await supabase.from("shipments").update({ status, updated_at: new Date().toISOString() } as any).eq("id", shipmentId);
       if (!upd.error) return;
     } catch {}
   }
-
   throw new Error("Unable to transition shipment (schema mismatch or permission denied).");
 }
 
@@ -204,12 +175,12 @@ async function track(eventType: string, shipmentId: string, metadata: any) {
 }
 
 export async function markPickedUp(shipmentId: string, evidence?: Record<string, unknown>) {
-  await transitionShipmentBestEffort(shipmentId, ["PICKED_UP", "OUT_FOR_DELIVERY", "PICKED_UP_PENDING_REGISTRATION"]);
+  await transitionShipmentBestEffort(shipmentId, ["PICKED_UP", "OUT_FOR_DELIVERY"]);
   await track("EXEC_PICKUP", shipmentId, evidence ?? {});
 }
 
 export async function markDelivered(shipmentId: string, evidence?: Record<string, unknown>) {
-  await transitionShipmentBestEffort(shipmentId, ["DELIVERED", "DELIVERED_POD_CAPTURED", "DELIVERED_OK"]);
+  await transitionShipmentBestEffort(shipmentId, ["DELIVERED", "DELIVERED_OK"]);
   await track("EXEC_DELIVERED", shipmentId, evidence ?? {});
 }
 

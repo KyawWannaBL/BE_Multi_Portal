@@ -3,50 +3,45 @@ import { NavLink } from "react-router-dom";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-const linkBase =
+const base =
   "block px-4 py-3 rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/5 text-sm font-semibold";
 
-export function ExecutionShell({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+export function ExecutionShell({ title, children }: { title: string; children: React.ReactNode }) {
   const { lang } = useLanguage();
-  const t = useMemo(() => (lang === "en" ? "en" : "my"), [lang]);
+  const t = (en: string, my: string) => (lang === "en" ? en : my);
 
   const items = useMemo(
     () => [
-      { to: "/portal/execution", en: "Worklist", my: "လုပ်ငန်းစာရင်း" },
-      { to: "/portal/execution/navigation", en: "Navigation", my: "လမ်းညွှန်" },
-      { to: "/portal/execution/manual", en: "QR Manual", my: "QR လမ်းညွှန်" },
+      { to: "/portal/execution", label: t("Worklist", "လုပ်ငန်းစာရင်း") },
+      { to: "/portal/execution/navigation", label: t("Mapbox Way Planning", "Mapbox လမ်းကြောင်းစီမံ") },
+      { to: "/portal/execution/live-map", label: t("Live Map View", "Live Map ကြည့်ရန်") },
+      { to: "/portal/execution/ocr-export", label: t("OCR → Excel", "OCR → Excel") },
+      { to: "/portal/execution/manual", label: t("QR Manual", "QR လမ်းညွှန်") },
     ],
-    []
+    [lang]
   );
 
   return (
-    <PortalShell title={title} links={[]}>
+    <PortalShell title={title}>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <aside className="lg:col-span-3">
           <div className="rounded-3xl border border-white/10 bg-white/5 p-3 space-y-2 sticky top-[88px]">
             <div className="text-[10px] font-mono text-white/60 tracking-widest uppercase px-2 py-1">
-              {t === "en" ? "Execution Menu" : "Execution မီနူး"}
+              {t("Execution Menu", "Execution မီနူး")}
             </div>
             {items.map((i) => (
               <NavLink
                 key={i.to}
                 to={i.to}
                 className={({ isActive }) =>
-                  `${linkBase} ${isActive ? "bg-emerald-500/10 border-emerald-500/30" : ""}`
+                  `${base} ${isActive ? "bg-emerald-500/10 border-emerald-500/30" : ""}`
                 }
               >
-                {t === "en" ? i.en : i.my}
+                {i.label}
               </NavLink>
             ))}
           </div>
         </aside>
-
         <section className="lg:col-span-9">{children}</section>
       </div>
     </PortalShell>

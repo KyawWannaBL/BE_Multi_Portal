@@ -1,61 +1,192 @@
 // @ts-nocheck
-export type Role = "SYS" | "APP_OWNER" | "SUPER_ADMIN" | "ADMIN" | "ADM" | "MGR" | "STAFF" | "FINANCE_USER" | "FINANCE_STAFF" | "HR_ADMIN" | "MARKETING_ADMIN" | "CUSTOMER_SERVICE" | "WAREHOUSE_MANAGER" | "SUBSTATION_MANAGER" | "SUPERVISOR" | "RIDER" | "DRIVER" | "HELPER" | "MERCHANT" | "CUSTOMER" | "GUEST";
+/**
+ * Account Control Store (EN/MM)
+ * ----------------------------------------------------------------------------
+ * EN: Local in-browser store for account registry + authority grants + audit.
+ *     Used by Super Admin / Account Control screens.
+ * MY: Browser အတွင်း account registry + authority grants + audit ကို သိမ်းတဲ့ store။
+ *     Super Admin / Account Control စာမျက်နှာတွေမှာ သုံးသည်။
+ *
+ * NOTE (EN/MM):
+ * - This is build-safe. It should not crash even if other modules evolve.
+ * - နောက်ပိုင်း Supabase/RPC ကိုပြောင်းချင်လည်း export မပျက်အောင် စီစဉ်ထားသည်။
+ */
+
+export type Role =
+  | "SYS" | "APP_OWNER" | "SUPER_ADMIN"
+  | "ADMIN" | "ADM" | "MGR"
+  | "STAFF"
+  | "FINANCE_USER" | "FINANCE_STAFF"
+  | "HR_ADMIN" | "HR"
+  | "MARKETING_ADMIN"
+  | "CUSTOMER_SERVICE"
+  | "WAREHOUSE_MANAGER"
+  | "SUBSTATION_MANAGER"
+  | "SUPERVISOR"
+  | "RIDER" | "DRIVER" | "HELPER" | "RDR"
+  | "MERCHANT" | "CUSTOMER"
+  | "DATA_ENTRY"
+  | "GUEST"
+  | string;
+
 export type AccountStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED" | "ARCHIVED";
-export type Permission = "ADMIN_PORTAL_READ" | "EXEC_COMMAND_READ" | "ADMIN_DASH_READ" | "ADMIN_USER_READ" | "USER_READ" | "USER_CREATE" | "USER_APPROVE" | "USER_REJECT" | "USER_ROLE_EDIT" | "USER_BLOCK" | "USER_RESET_TOKEN" | "USER_DOCS_READ" | "AUTHORITY_MANAGE" | "AUDIT_READ" | "BULK_ACTIONS" | "CSV_IMPORT" | "CSV_EXPORT" | "PORTAL_OPERATIONS" | "PORTAL_FINANCE" | "PORTAL_MARKETING" | "PORTAL_HR" | "PORTAL_SUPPORT" | "PORTAL_EXECUTION" | "PORTAL_WAREHOUSE" | "PORTAL_BRANCH" | "PORTAL_SUPERVISOR" | "PORTAL_MERCHANT" | "PORTAL_CUSTOMER" | string;
+
+export type Permission =
+  | "ADMIN_PORTAL_READ"
+  | "EXEC_COMMAND_READ"
+  | "ADMIN_DASH_READ"
+  | "ADMIN_USER_READ"
+  | "USER_READ"
+  | "USER_CREATE"
+  | "USER_APPROVE"
+  | "USER_REJECT"
+  | "USER_ROLE_EDIT"
+  | "USER_BLOCK"
+  | "USER_RESET_TOKEN"
+  | "USER_DOCS_READ"
+  | "AUTHORITY_MANAGE"
+  | "AUDIT_READ"
+  | "BULK_ACTIONS"
+  | "CSV_IMPORT"
+  | "CSV_EXPORT"
+  | "PORTAL_OPERATIONS"
+  | "PORTAL_FINANCE"
+  | "PORTAL_MARKETING"
+  | "PORTAL_HR"
+  | "PORTAL_SUPPORT"
+  | "PORTAL_EXECUTION"
+  | "PORTAL_WAREHOUSE"
+  | "PORTAL_BRANCH"
+  | "PORTAL_SUPERVISOR"
+  | "PORTAL_MERCHANT"
+  | "PORTAL_CUSTOMER"
+  | string;
+
 export type PasskeyCredential = { id: string; createdAt: string; label?: string };
-export type AccountSecurity = { blockedAt?: string; blockedBy?: string; onboardingTokenHash?: string; onboardingTokenIssuedAt?: string; onboardingTokenExpiresAt?: string; passkeys?: PasskeyCredential[]; biometricGateEnabled?: boolean; };
-export type AccountApproval = { requestedAt: string; requestedBy: string; processedAt?: string; processedBy?: string; decision?: "APPROVED" | "REJECTED"; note?: string; };
-export type Account = { id: string; name: string; email: string; role: Role; status: AccountStatus; department?: string; phone?: string; employeeId?: string; createdAt: string; createdBy: string; approval?: AccountApproval; security?: AccountSecurity; };
-export type AuthorityGrant = { id: string; subjectEmail: string; permission: Permission; grantedAt: string; grantedBy: string; revokedAt?: string; revokedBy?: string; };
-export type AuthorityRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type AuthorityRequestType = "GRANT" | "REVOKE";
-export type AuthorityRequest = { id: string; type: AuthorityRequestType; subjectEmail: string; permission: Permission; requestedAt: string; requestedBy: string; requestNote?: string; status: AuthorityRequestStatus; processedAt?: string; processedBy?: string; decisionNote?: string; };
-export type AuditEvent = { id: string; at: string; actorEmail: string; action: string; targetEmail?: string; detail?: string; };
-export type Store = { v: 2; accounts: Account[]; grants: AuthorityGrant[]; authorityRequests: AuthorityRequest[]; audit: AuditEvent[]; };
+
+export type AccountSecurity = {
+  blockedAt?: string;
+  blockedBy?: string;
+  onboardingTokenHash?: string;
+  onboardingTokenIssuedAt?: string;
+  onboardingTokenExpiresAt?: string;
+  passkeys?: PasskeyCredential[];
+  biometricGateEnabled?: boolean;
+};
+
+export type AccountApproval = {
+  requestedAt: string;
+  requestedBy: string;
+  processedAt?: string;
+  processedBy?: string;
+  decision?: "APPROVED" | "REJECTED";
+  note?: string;
+};
+
+export type Account = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: AccountStatus;
+  department?: string;
+  phone?: string;
+  employeeId?: string;
+  createdAt: string;
+  createdBy: string;
+  approval?: AccountApproval;
+  security?: AccountSecurity;
+  permissions?: Permission[]; // optional cached permissions
+};
+
+export type AuthorityGrant = {
+  id: string;
+  subjectEmail: string;
+  permission: Permission;
+  grantedAt: string;
+  grantedBy: string;
+  revokedAt?: string;
+  revokedBy?: string;
+};
+
+export type AuditEvent = {
+  id: string;
+  at: string;
+  actorEmail: string;
+  action: string;
+  targetEmail?: string;
+  detail?: string;
+};
+
+export type Store = {
+  v: 2;
+  accounts: Account[];
+  grants: AuthorityGrant[];
+  audit: AuditEvent[];
+};
+
+/**
+ * EN: Authority request used by AccountControl UI workflows.
+ * MY: AccountControl UI မှာ authority ပြောင်းလိုတဲ့ request ပုံစံ။
+ */
+export type AuthorityRequest = {
+  id: string;
+  requesterEmail: string;
+  subjectEmail: string;
+  permission: Permission;
+  requestedAt: string;
+  reason?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  processedAt?: string;
+  processedBy?: string;
+  note?: string;
+};
 
 export const STORAGE_KEY = "account_control_store_v2";
 
 export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
   { code: "ADMIN_PORTAL_READ", en: "Super Admin portal access", mm: "Super Admin portal ဝင်ခွင့်" },
   { code: "EXEC_COMMAND_READ", en: "Executive command access", mm: "Executive command ဝင်ခွင့်" },
-  { code: "ADMIN_DASH_READ", en: "Admin dashboard view", mm: "Admin dashboard ကြည့်ခွင့်" },
-  { code: "ADMIN_USER_READ", en: "Admin users view", mm: "Admin users ကြည့်ခွင့်" },
   { code: "USER_READ", en: "View accounts", mm: "အကောင့်များကြည့်ရန်" },
   { code: "USER_CREATE", en: "Create account request", mm: "အကောင့်တောင်းဆိုမှု ဖန်တီးရန်" },
   { code: "USER_APPROVE", en: "Approve requests", mm: "တောင်းဆိုမှု အတည်ပြုရန်" },
   { code: "USER_REJECT", en: "Reject requests", mm: "တောင်းဆိုမှု ငြင်းပယ်ရန်" },
   { code: "USER_ROLE_EDIT", en: "Edit roles", mm: "Role ပြောင်းရန်" },
   { code: "USER_BLOCK", en: "Block/Unblock", mm: "ပိတ်/ဖွင့်ရန်" },
-  { code: "USER_RESET_TOKEN", en: "Reset onboarding token", mm: "Onboarding token ပြန်ချရန်" },
-  { code: "USER_DOCS_READ", en: "View docs", mm: "စာရွက်စာတမ်းကြည့်ရန်" },
   { code: "AUTHORITY_MANAGE", en: "Manage authorities", mm: "အာဏာများ စီမံရန်" },
   { code: "AUDIT_READ", en: "View audit log", mm: "Audit log ကြည့်ရန်" },
   { code: "BULK_ACTIONS", en: "Bulk actions", mm: "အုပ်စုလိုက်လုပ်ဆောင်မှု" },
   { code: "CSV_IMPORT", en: "CSV import", mm: "CSV သွင်းရန်" },
   { code: "CSV_EXPORT", en: "CSV export", mm: "CSV ထုတ်ရန်" },
-  { code: "PORTAL_OPERATIONS", en: "Operations portal access", mm: "Operations portal ဝင်ခွင့်" },
-  { code: "PORTAL_FINANCE", en: "Finance portal access", mm: "Finance portal ဝင်ခွင့်" },
-  { code: "PORTAL_MARKETING", en: "Marketing portal access", mm: "Marketing portal ဝင်ခွင့်" },
-  { code: "PORTAL_HR", en: "HR portal access", mm: "HR portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPPORT", en: "Support portal access", mm: "Support portal ဝင်ခွင့်" },
-  { code: "PORTAL_EXECUTION", en: "Execution portal access", mm: "Execution portal ဝင်ခွင့်" },
-  { code: "PORTAL_WAREHOUSE", en: "Warehouse portal access", mm: "Warehouse portal ဝင်ခွင့်" },
-  { code: "PORTAL_BRANCH", en: "Branch portal access", mm: "Branch portal ဝင်ခွင့်" },
-  { code: "PORTAL_SUPERVISOR", en: "Supervisor portal access", mm: "Supervisor portal ဝင်ခွင့်" },
-  { code: "PORTAL_MERCHANT", en: "Merchant portal access", mm: "Merchant portal ဝင်ခွင့်" },
-  { code: "PORTAL_CUSTOMER", en: "Customer portal access", mm: "Customer portal ဝင်ခွင့်" },
 ];
 
-export const DEFAULT_ROLES: Role[] = ["SYS", "APP_OWNER", "SUPER_ADMIN", "ADMIN", "ADM", "MGR", "STAFF", "FINANCE_USER", "FINANCE_STAFF", "HR_ADMIN", "MARKETING_ADMIN", "CUSTOMER_SERVICE", "WAREHOUSE_MANAGER", "SUBSTATION_MANAGER", "SUPERVISOR", "RIDER", "DRIVER", "HELPER", "MERCHANT", "CUSTOMER"];
+export const DEFAULT_ROLES: Role[] = [
+  "SYS","APP_OWNER","SUPER_ADMIN","ADMIN","ADM","MGR","STAFF",
+  "FINANCE_USER","FINANCE_STAFF","HR_ADMIN","HR",
+  "MARKETING_ADMIN","CUSTOMER_SERVICE",
+  "WAREHOUSE_MANAGER","SUBSTATION_MANAGER","SUPERVISOR",
+  "RIDER","DRIVER","HELPER","RDR",
+  "DATA_ENTRY",
+  "MERCHANT","CUSTOMER"
+];
 
 export function nowIso(): string { return new Date().toISOString(); }
 export function safeLower(v: unknown): string { return String(v ?? "").trim().toLowerCase(); }
-export function uuid(): string { const c: any = globalThis.crypto; if (c?.randomUUID) return c.randomUUID(); return `id_${Math.random().toString(16).slice(2)}_${Date.now()}`; }
-export function isEmailValid(email: string): boolean { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()); }
+
+export function uuid(): string {
+  const c: any = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+}
+
+export function isEmailValid(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email ?? "").trim());
+}
 
 export function normalizeRole(role?: string | null): Role {
   const r = String(role ?? "").trim().toUpperCase();
   if (!r) return "GUEST";
+  if (r === "SUPER_A") return "SUPER_ADMIN";
   if (r.startsWith("SUPER")) return "SUPER_ADMIN";
   if (r.startsWith("APP")) return "APP_OWNER";
   if (r.startsWith("SYS")) return "SYS";
@@ -75,7 +206,7 @@ export function seedStore(): Store {
       { id: uuid(), name: "MD VENTURES", email: "md@britiumventures.com", role: "APP_OWNER", status: "ACTIVE", createdAt: at, createdBy: "SYSTEM" },
       { id: uuid(), name: "SUPER ADMIN", email: "md@britiumexpress.com", role: "SUPER_ADMIN", status: "ACTIVE", createdAt: at, createdBy: "SYSTEM" },
     ],
-    grants: [], authorityRequests: [],
+    grants: [],
     audit: [{ id: uuid(), at, actorEmail: "SYSTEM", action: "STORE_SEEDED", detail: "Initial seed created" }],
   };
 }
@@ -85,10 +216,12 @@ export function loadStore(): Store {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedStore();
-    const s = JSON.parse(raw) as Partial<Store>;
-    if (!s || !Array.isArray(s.accounts) || !Array.isArray(s.grants) || !Array.isArray(s.audit)) return seedStore();
-    return { v: 2, accounts: s.accounts as Account[], grants: s.grants as AuthorityGrant[], authorityRequests: Array.isArray((s as any).authorityRequests) ? ((s as any).authorityRequests as AuthorityRequest[]) : [], audit: s.audit as AuditEvent[] };
-  } catch { return seedStore(); }
+    const s = JSON.parse(raw) as Store;
+    if (!s || !Array.isArray(s.accounts)) return seedStore();
+    return { ...s, v: 2 };
+  } catch {
+    return seedStore();
+  }
 }
 
 export function saveStore(store: Store): void {
@@ -112,103 +245,53 @@ export function effectivePermissions(store: Store, actor: Account | undefined): 
   return new Set(activeGrantsFor(store.grants, actor.email).map((g) => g.permission));
 }
 
+/**
+ * ✅ REQUIRED EXPORT
+ * EN: permission check used by AccountControl page
+ * MY: AccountControl စာမျက်နှာမှာ သုံးတဲ့ permission စစ်ခြင်း function
+ */
 export function can(store: Store, actor: Account | undefined, perm: Permission): boolean {
   return effectivePermissions(store, actor).has(perm);
 }
 
-export function defaultPortalPermissionsForRole(role: Role): Permission[] {
-  const r = normalizeRole(role);
-  if (roleIsPrivileged(r)) return [];
-  if (r === "FINANCE_USER" || r === "FINANCE_STAFF") return ["PORTAL_FINANCE"];
-  if (r === "HR_ADMIN") return ["PORTAL_HR"];
-  if (r === "MARKETING_ADMIN") return ["PORTAL_MARKETING"];
-  if (r === "CUSTOMER_SERVICE") return ["PORTAL_SUPPORT"];
-  if (r === "WAREHOUSE_MANAGER") return ["PORTAL_WAREHOUSE"];
-  if (r === "SUBSTATION_MANAGER") return ["PORTAL_BRANCH"];
-  if (r === "SUPERVISOR") return ["PORTAL_SUPERVISOR"];
-  if (r === "MERCHANT") return ["PORTAL_MERCHANT"];
-  if (r === "CUSTOMER") return ["PORTAL_CUSTOMER"];
-  if (r === "RIDER" || r === "DRIVER" || r === "HELPER") return ["PORTAL_EXECUTION"];
-  return ["PORTAL_OPERATIONS"];
+/**
+ * EN: Can apply authority directly (no approval step)?
+ * MY: authority ကို တိုက်ရိုက် apply လုပ်ခွင့်ရှိလား (approval မလို)?
+ */
+export function canApplyAuthorityDirect(store: Store, actor: Account | undefined, perm: Permission): boolean {
+  if (!actor) return false;
+  if (roleIsPrivileged(actor.role)) return true;
+  // must have authority manage + the permission itself
+  return can(store, actor, "AUTHORITY_MANAGE") && can(store, actor, perm);
 }
 
-export function defaultGovernancePermissionsForRole(role: Role): Permission[] {
-  const r = normalizeRole(role);
-  if (roleIsPrivileged(r)) return [];
-  if (r === "ADMIN" || r === "ADM" || r === "MGR") {
-    return [ "USER_READ", "USER_CREATE", "USER_APPROVE", "USER_REJECT", "USER_ROLE_EDIT", "USER_BLOCK", "USER_RESET_TOKEN", "AUDIT_READ" ];
-  }
-  return [];
-}
-
+/**
+ * EN: Can request authority change (approval flow)?
+ * MY: authority change request တင်ခွင့်ရှိလား (approval flow)?
+ */
 export function canRequestAuthorityChange(store: Store, actor: Account | undefined): boolean {
-  if (!actor || actor.status !== "ACTIVE") return false;
-  return can(store, actor, "AUTHORITY_MANAGE") || roleIsPrivileged(actor.role);
+  if (!actor) return false;
+  if (actor.status !== "ACTIVE") return false;
+  if (actor.security?.blockedAt) return false;
+  return true;
 }
 
-export function canApplyAuthorityDirect(store: Store, actor: Account | undefined): boolean {
-  if (!actor || actor.status !== "ACTIVE") return false;
-  return roleIsPrivileged(actor.role);
-}
-
+/**
+ * EN: push audit record into store
+ * MY: audit record ထည့်
+ */
 export function pushAudit(store: Store, e: Omit<AuditEvent, "id" | "at"> & { at?: string }): Store {
-  const evt: AuditEvent = { id: uuid(), at: e.at ?? nowIso(), actorEmail: e.actorEmail, action: e.action, targetEmail: e.targetEmail, detail: e.detail };
+  const evt: AuditEvent = {
+    id: uuid(),
+    at: e.at ?? nowIso(),
+    actorEmail: e.actorEmail,
+    action: e.action,
+    targetEmail: e.targetEmail,
+    detail: e.detail,
+  };
   return { ...store, audit: [evt, ...store.audit].slice(0, 500) };
 }
 
 export function ensureAtLeastOneSuperAdminActive(accounts: Account[]): boolean {
-  return accounts.filter((a) => a.role === "SUPER_ADMIN" && a.status === "ACTIVE").length >= 1;
-}
-
-export function grantDirect(store: Store, actorEmail: string, subjectEmail: string, perm: Permission): Store {
-  const exists = store.grants.some((g) => safeLower(g.subjectEmail) === safeLower(subjectEmail) && g.permission === perm && !g.revokedAt);
-  if (exists) return store;
-  const next: Store = { ...store, grants: [{ id: uuid(), subjectEmail, permission: perm, grantedAt: nowIso(), grantedBy: actorEmail }, ...store.grants] };
-  return pushAudit(next, { actorEmail, action: "AUTHORITY_GRANTED", targetEmail: subjectEmail, detail: String(perm) });
-}
-
-export function revokeDirect(store: Store, actorEmail: string, subjectEmail: string, perm: Permission): Store {
-  const next: Store = { ...store, grants: store.grants.map((g) => { if (safeLower(g.subjectEmail) !== safeLower(subjectEmail)) return g; if (g.permission !== perm) return g; if (g.revokedAt) return g; return { ...g, revokedAt: nowIso(), revokedBy: actorEmail }; }) };
-  return pushAudit(next, { actorEmail, action: "AUTHORITY_REVOKED", targetEmail: subjectEmail, detail: String(perm) });
-}
-
-export function requestAuthorityChange(store: Store, actorEmail: string, subjectEmail: string, type: AuthorityRequestType, perm: Permission, requestNote?: string): Store {
-  const req: AuthorityRequest = { id: uuid(), type, subjectEmail, permission: perm, requestedAt: nowIso(), requestedBy: actorEmail, requestNote, status: "PENDING" };
-  const next = { ...store, authorityRequests: [req, ...store.authorityRequests] };
-  return pushAudit(next, { actorEmail, action: "AUTHORITY_REQUESTED", targetEmail: subjectEmail, detail: `${type} ${perm}` });
-}
-
-export function approveAuthorityRequest(store: Store, processorEmail: string, requestId: string, decisionNote?: string): Store {
-  const req = store.authorityRequests.find((r) => r.id === requestId);
-  if (!req || req.status !== "PENDING") return store;
-  const updated: AuthorityRequest = { ...req, status: "APPROVED", processedAt: nowIso(), processedBy: processorEmail, decisionNote };
-  let next: Store = { ...store, authorityRequests: store.authorityRequests.map((r) => (r.id === requestId ? updated : r)) };
-  if (req.type === "GRANT") next = grantDirect(next, processorEmail, req.subjectEmail, req.permission);
-  else next = revokeDirect(next, processorEmail, req.subjectEmail, req.permission);
-  return pushAudit(next, { actorEmail: processorEmail, action: "AUTHORITY_REQUEST_APPROVED", targetEmail: req.subjectEmail, detail: `${req.type} ${req.permission} • ${decisionNote ?? ""}`.trim() });
-}
-
-export function rejectAuthorityRequest(store: Store, processorEmail: string, requestId: string, decisionNote?: string): Store {
-  const req = store.authorityRequests.find((r) => r.id === requestId);
-  if (!req || req.status !== "PENDING") return store;
-  const updated: AuthorityRequest = { ...req, status: "REJECTED", processedAt: nowIso(), processedBy: processorEmail, decisionNote };
-  const next: Store = { ...store, authorityRequests: store.authorityRequests.map((r) => (r.id === requestId ? updated : r)) };
-  return pushAudit(next, { actorEmail: processorEmail, action: "AUTHORITY_REQUEST_REJECTED", targetEmail: req.subjectEmail, detail: `${req.type} ${req.permission} • ${decisionNote ?? ""}`.trim() });
-}
-
-export function csvParse(text: string): string[][] {
-  const rows: string[][] = []; let row: string[] = []; let field = ""; let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]; const n = text[i + 1];
-    if (inQuotes) { if (c === '"' && n === '"') { field += '"'; i++; } else if (c === '"') { inQuotes = false; } else { field += c; } } else {
-      if (c === '"') inQuotes = true; else if (c === ",") { row.push(field); field = ""; } else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; } else if (c !== "\r") { field += c; }
-    }
-  }
-  row.push(field); rows.push(row);
-  return rows.filter((r) => r.some((x) => x.trim() !== ""));
-}
-
-export function csvStringify(rows: string[][]): string {
-  const esc = (s: string) => { const needs = /[",\n\r]/.test(s); const out = s.replaceAll('"', '""'); return needs ? `"${out}"` : out; };
-  return rows.map((r) => r.map((c) => esc(c ?? "")).join(",")).join("\n");
+  return accounts.filter((a) => normalizeRole(a.role) === "SUPER_ADMIN" && a.status === "ACTIVE").length >= 1;
 }

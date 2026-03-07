@@ -1,48 +1,8 @@
-// @ts-nocheck
-import React, { useState, useEffect, useMemo } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import React from "react";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { NAV_SECTIONS, flatByPath, type NavItem, type NavSection } from "@/lib/portalRegistry";
-import { allowedByRole, hasAnyPermission, normalizeRole } from "@/lib/permissionResolver";
-import { clearRecentNav, getRecentNav, pushRecent } from "@/lib/recentNav";
-import { Search, History, Trash2 } from "lucide-react";
-
-function filterTree(auth: any, item: NavItem): NavItem | null {
-  if (!allowedByRole(auth, item.allowRoles)) return null;
-  if (!hasAnyPermission(auth, item.requiredPermissions)) return null;
-  const children = item.children ? item.children.map((c) => filterTree(auth, c)).filter(Boolean) as NavItem[] : undefined;
-  return { ...item, children };
-}
-
-function applyFilters(auth: any): NavSection[] {
-  return NAV_SECTIONS.map((sec) => {
-    const items = sec.items.map((it) => filterTree(auth, it)).filter(Boolean) as NavItem[];
-    return { ...sec, items };
-  }).filter((sec) => sec.items.length > 0);
-}
-
-function matches(item: NavItem, q: string): boolean {
-  const s = `${item.label_en} ${item.label_mm} ${item.path}`.toLowerCase();
-  return s.includes(q);
-}
-
-function filterBySearch(sections: NavSection[], q: string): NavSection[] {
-  if (!q) return sections;
-  const out: NavSection[] = [];
-  for (const sec of sections) {
-    const items: NavItem[] = [];
-    for (const it of sec.items) {
-      const childMatches = (it.children ?? []).filter((c) => matches(c, q));
-      const selfMatch = matches(it, q);
-      if (selfMatch || childMatches.length) {
-        items.push({ ...it, children: childMatches.length ? childMatches : it.children });
-      }
-    }
-    if (items.length) out.push({ ...sec, items });
-  }
-  return out;
-}
+import { navForRole, type NavItem } from "@/lib/portalRegistry";
 
 function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; onNavigate?: () => void }) {
   const { lang } = useLanguage();
@@ -76,75 +36,19 @@ function Item({ item, depth = 0, onNavigate }: { item: NavItem; depth?: number; 
   );
 }
 
-export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const auth = useAuth() as any;
+export function PortalSidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { role } = useAuth();
   const { lang } = useLanguage();
-  const loc = useLocation();
-
-  const [q, setQ] = useState("");
-  const [recentTick, setRecentTick] = useState(0);
-
-  useEffect(() => {
-    pushRecent(loc.pathname);
-    setRecentTick((x) => x + 1);
-  }, [loc.pathname]);
-
-  const sectionsRBAC = useMemo(() => applyFilters(auth), [auth?.role, auth?.user, auth?.permissions]);
-  const sections = useMemo(() => filterBySearch(sectionsRBAC, q.trim().toLowerCase()), [sectionsRBAC, q]);
-
-  const flatMap = useMemo(() => flatByPath(sectionsRBAC), [sectionsRBAC]);
-  const recent = useMemo(() => getRecentNav(), [recentTick]);
-
-  const recentItems = useMemo(() => {
-    const items = [];
-    for (const r of recent.slice(0, 8)) {
-      const it = flatMap[r.path];
-      if (it) items.push(it);
-    }
-    return items;
-  }, [recent, flatMap]);
+  const sections = navForRole(role);
 
   const panel = (
     <aside className="w-72 shrink-0 rounded-2xl border border-white/10 bg-[#0B101B] p-4 h-[calc(100vh-96px)] overflow-auto">
-      <div className="mb-4">
-        <div className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 h-11">
-          <Search className="h-4 w-4 text-slate-500" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={lang === "en" ? "Search menu..." : "မီနူးရှာရန်..."}
-            className="bg-transparent outline-none text-sm text-slate-200 w-full"
-          />
-        </div>
-      </div>
-
-      {recentItems.length ? (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase flex items-center gap-2">
-              <History className="h-3 w-3" />
-              {lang === "en" ? "RECENT" : "မကြာသေးမီ"}
-            </div>
-            <button
-              onClick={() => {
-                clearRecentNav();
-                setRecentTick((x) => x + 1);
-              }}
-              className="text-[10px] font-black tracking-widest uppercase text-slate-400 hover:text-white flex items-center gap-1"
-            >
-              <Trash2 className="h-3 w-3" />
-              {lang === "en" ? "Clear" : "ရှင်းမည်"}
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {recentItems.map((it) => (
-              <Item key={it.id} item={it} onNavigate={onClose} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {sections.map((sec) => (
         <div key={sec.id} className="mb-6">
           <div className="text-[10px] font-mono text-slate-500 tracking-[0.25em] uppercase mb-3">
@@ -157,16 +61,15 @@ export function PortalSidebar({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         </div>
       ))}
-
-      <div className="mt-6 text-[10px] font-mono text-slate-600">
-        ROLE: {normalizeRole(auth?.role)}
-      </div>
     </aside>
   );
 
   return (
     <>
+      {/* Desktop */}
       <div className="hidden lg:block">{panel}</div>
+
+      {/* Mobile Drawer */}
       {open ? (
         <div className="lg:hidden fixed inset-0 z-[999]">
           <div className="absolute inset-0 bg-black/70" onClick={onClose} />

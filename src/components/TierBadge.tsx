@@ -1,36 +1,25 @@
-// @ts-nocheck
 import React from "react";
-import { normalizeRole } from "@/lib/permissionResolver";
+import { ROLE_MATRIX, normalizeRole } from "@/lib/rbac";
 
-export type Tier = "L1" | "L2" | "L3" | "L4" | "L5";
-
-export function getTier(role?: string, tierLevel?: unknown): Tier {
-  const rawTier = String(tierLevel || "").trim().toUpperCase();
-  if (/^L[1-5]$/.test(rawTier)) return rawTier as Tier;
-  if (/^[1-5]$/.test(rawTier)) return (`L${rawTier}` as Tier);
-
+export default function TierBadge({ role }: { role: string | null | undefined }) {
   const r = normalizeRole(role);
-  if (["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r)) return "L5";
-  if (["ADMIN", "ADM", "MGR", "OPERATIONS_ADMIN"].includes(r)) return "L4";
-  if (r.includes("FINANCE") || r.includes("HR") || r.includes("MARKETING") || r.includes("SUPPORT") || r.includes("CUSTOMER_SERVICE")) return "L3";
-  if (r === "SUPERVISOR" || r === "STAFF" || r === "WAREHOUSE_MANAGER" || r === "SUBSTATION_MANAGER" || r === "DATA_ENTRY") return "L2";
-  
-  return "L1";
-}
+  const info = r ? (ROLE_MATRIX as any)[r] : null;
 
-export default function TierBadge({ role, tierLevel, className }: { role?: string | null; tierLevel?: unknown; className?: string }) {
-  const tier = getTier(role || undefined, tierLevel);
-  const colors: Record<Tier, string> = {
-    L5: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
-    L4: "bg-sky-500/15 text-sky-300 border-sky-500/25",
-    L3: "bg-amber-500/15 text-amber-300 border-amber-500/25",
-    L2: "bg-white/10 text-slate-200 border-white/15",
-    L1: "bg-white/5 text-slate-300 border-white/10"
-  };
+  const level = info?.level ?? (r === "SYS" || r === "APP_OWNER" || r === "SUPER_ADMIN" ? "L5" : "L1");
+  const scope = info?.scope ?? "S1";
+
+  const color =
+    level === "L5"
+      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
+      : level === "L4"
+        ? "bg-sky-500/15 text-sky-300 border-sky-500/25"
+        : level === "L3"
+          ? "bg-amber-500/15 text-amber-300 border-amber-500/25"
+          : "bg-white/5 text-slate-300 border-white/10";
 
   return (
-    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${colors[tier]} ${className ?? ""}`} title={`Tier ${tier}`}>
-      {tier}
+    <span className={`inline-flex items-center h-7 px-3 rounded-full border text-[10px] font-black tracking-widest uppercase ${color}`} title={`${r ?? "NO_ROLE"}`}>
+      {level} • {scope}
     </span>
   );
 }
