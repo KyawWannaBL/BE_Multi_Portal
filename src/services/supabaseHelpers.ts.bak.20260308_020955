@@ -1,0 +1,19 @@
+// @ts-nocheck
+/**
+ * supabaseHelpers (EN/MM)
+ * EN: small helper utilities for consistent supabase calls.
+ * MY: supabase call များအတွက် helper utilities။
+ */
+
+export function assertOk(res: any, msg?: string) {
+  if (res?.error) {
+    const e = res.error;
+    const m = msg ? `${msg}: ${e.message ?? String(e)}` : (e.message ?? String(e));
+    throw new Error(m);
+  }
+  return res?.data;
+}
+
+export function safeErrorMessage(e: any): string {
+  return e?.message ?? String(e ?? "Unknown error");
+}

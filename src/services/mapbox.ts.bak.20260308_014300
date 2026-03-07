@@ -1,0 +1,62 @@
+export type LngLat = [number, number];
+
+function token(): string {
+  return (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN ||
+    import.meta.env.VITE_MAPBOX_TOKEN ||
+    "") as string;
+}
+
+export function isMapboxConfigured(): boolean {
+  return Boolean(token());
+}
+
+function baseHeaders() {
+  return { "content-type": "application/json" };
+}
+
+export async function geocodeForward(
+  query: string,
+  opts?: { limit?: number; country?: string }
+): Promise<{ center: LngLat; place_name: string }[]> {
+  const t = token();
+  if (!t) throw new Error("Mapbox token missing");
+  const limit = opts?.limit ?? 1;
+  const country = opts?.country ?? "MM";
+
+  const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`);
+  url.searchParams.set("access_token", t);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("country", country);
+
+  const res = await fetch(url.toString(), { headers: baseHeaders() });
+  if (!res.ok) throw new Error(`Geocode failed: ${res.status}`);
+  const json = await res.json();
+  const feats = Array.isArray(json?.features) ? json.features : [];
+  return feats
+    .map((f: any) => ({ center: f.center as LngLat, place_name: String(f.place_name ?? "") }))
+    .filter((x: any) => Array.isArray(x.center) && x.center.length === 2);
+}
+
+export async function fetchDirections(input: {
+  profile: "driving" | "driving-traffic" | "walking" | "cycling";
+  coordinates: LngLat[];
+  geometries?: "geojson";
+  overview?: "full" | "simplified" | "false";
+}): Promise<{ geometry: any; duration: number; distance: number }> {
+  const t = token();
+  if (!t) throw new Error("Mapbox token missing");
+  if (input.coordinates.length < 2) throw new Error("Need at least 2 points");
+
+  const coords = input.coordinates.map((c) => `${c[0]},${c[1]}`).join(";");
+  const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/${input.profile}/${coords}`);
+  url.searchParams.set("access_token", t);
+  url.searchParams.set("geometries", input.geometries ?? "geojson");
+  url.searchParams.set("overview", input.overview ?? "full");
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`Directions failed: ${res.status}`);
+  const json = await res.json();
+  const r0 = json?.routes?.[0];
+  if (!r0?.geometry) throw new Error("No route");
+  return { geometry: r0.geometry, duration: Number(r0.duration ?? 0), distance: Number(r0.distance ?? 0) };
+}

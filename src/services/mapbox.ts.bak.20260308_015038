@@ -1,0 +1,7 @@
+export async function geocodeForward(query: string) {
+  const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+  if (!token) throw new Error("Missing Mapbox Token");
+  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&country=MM&limit=1`);
+  const json = await res.json();
+  return json.features?.[0]?.center || null;
+}

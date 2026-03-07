@@ -1,0 +1,7 @@
+export SUPABASE_URL="https://dltavabvjwocknkyvwgz.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsdGF2YWJ2andvY2tua3l2d2d6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTExMzE5NCwiZXhwIjoyMDg2Njg5MTk0fQ.ckX1XXGgKPzD3IBW6yG2iG2RGfkQXyjE9IQbQZMMymA"
+export TARGET_EMAIL="md@britiumexpress.com"
+export NEW_PASSWORD="Britium@2026#Secure"
+export ROLE="SUPER_ADMIN"
+
+bash scripts/admin_bootstrap_user.sh

@@ -1,46 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "🩹 Fixing build: export 'can' and missing helpers in accountControlStore.ts (EN/MM)"
-echo "🩹 Build မပျက်အောင် accountControlStore.ts မှာ 'can' နဲ့လိုအပ်တဲ့ helper export များထည့်နေသည် (EN/MM)"
+echo "🩹 Fixing build: rewrite src/lib/accountControlStore.ts with required exports (EN/MM)"
+echo "🩹 Build error ပြင်: src/lib/accountControlStore.ts ကို exports အပြည့်အစုံနဲ့ ပြန်ရေး (EN/MM)"
 
+FILE="src/lib/accountControlStore.ts"
 mkdir -p src/lib
 
 # Backup (EN: keep old file, MY: အဟောင်းကို backup သိမ်း)
-if [ -f src/lib/accountControlStore.ts ]; then
-  cp -f src/lib/accountControlStore.ts "src/lib/accountControlStore.ts.bak.$(date +%Y%m%d_%H%M%S)" || true
-  echo "✅ Backup created: src/lib/accountControlStore.ts.bak.*"
+if [ -f "$FILE" ]; then
+  cp -f "$FILE" "${FILE}.bak.$(date +%Y%m%d_%H%M%S)" || true
 fi
 
-cat > src/lib/accountControlStore.ts <<'EOF'
+cat > "$FILE" <<'EOF'
 // @ts-nocheck
 /**
- * Account Control Store (EN/MM)
+ * Account Control Store (EN/MM) - Production-safe export surface
  * ----------------------------------------------------------------------------
- * EN: Local in-browser store for account registry + authority grants + audit.
- *     Used by Super Admin / Account Control screens.
- * MY: Browser အတွင်း account registry + authority grants + audit ကို သိမ်းတဲ့ store။
- *     Super Admin / Account Control စာမျက်နှာတွေမှာ သုံးသည်။
+ * EN: This file provides local (client-side) account registry + permission grants.
+ *     It exists to keep the UI build-stable while backend RBAC is being finalized.
+ * MY: Backend RBAC မပြီးသေးချိန်မှာ UI build မပျက်အောင်
+ *     အကောင့်စာရင်း/ခွင့်ပြုချက် (authority) ကို localStorage မှာ စီမံပေးတဲ့ module ပါ။
  *
- * NOTE (EN/MM):
- * - This is build-safe. It should not crash even if other modules evolve.
- * - နောက်ပိုင်း Supabase/RPC ကိုပြောင်းချင်လည်း export မပျက်အောင် စီစဉ်ထားသည်။
+ * IMPORTANT / အရေးကြီး:
+ * - This is NOT a replacement for Supabase RLS. It's UI-side convenience only.
+ * - Supabase RLS များကို အစားမထိုးနိုင်ပါ။ UI စစ်ဆေးရေးအတွက်သာဖြစ်ပါတယ်။
  */
 
 export type Role =
-  | "SYS" | "APP_OWNER" | "SUPER_ADMIN"
-  | "ADMIN" | "ADM" | "MGR"
+  | "SYS"
+  | "APP_OWNER"
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "ADM"
+  | "MGR"
   | "STAFF"
-  | "FINANCE_USER" | "FINANCE_STAFF"
-  | "HR_ADMIN" | "HR"
+  | "FINANCE_USER"
+  | "FINANCE_STAFF"
+  | "HR_ADMIN"
   | "MARKETING_ADMIN"
   | "CUSTOMER_SERVICE"
   | "WAREHOUSE_MANAGER"
   | "SUBSTATION_MANAGER"
   | "SUPERVISOR"
-  | "RIDER" | "DRIVER" | "HELPER" | "RDR"
-  | "MERCHANT" | "CUSTOMER"
   | "DATA_ENTRY"
+  | "RIDER"
+  | "DRIVER"
+  | "HELPER"
+  | "MERCHANT"
+  | "CUSTOMER"
   | "GUEST"
   | string;
 
@@ -111,7 +119,6 @@ export type Account = {
   createdBy: string;
   approval?: AccountApproval;
   security?: AccountSecurity;
-  permissions?: Permission[]; // optional cached permissions
 };
 
 export type AuthorityGrant = {
@@ -133,32 +140,33 @@ export type AuditEvent = {
   detail?: string;
 };
 
-export type Store = {
-  v: 2;
-  accounts: Account[];
-  grants: AuthorityGrant[];
-  audit: AuditEvent[];
-};
-
 /**
- * EN: Authority request used by AccountControl UI workflows.
- * MY: AccountControl UI မှာ authority ပြောင်းလိုတဲ့ request ပုံစံ။
+ * EN: Authority request (optional workflow)
+ * MY: Authority ခွင့်ပြုချက် တောင်းဆိုမှု (လိုအပ်ပါက workflow)
  */
 export type AuthorityRequest = {
   id: string;
-  requesterEmail: string;
   subjectEmail: string;
   permission: Permission;
   requestedAt: string;
-  reason?: string;
+  requestedBy: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
-  processedAt?: string;
-  processedBy?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
   note?: string;
 };
 
-export const STORAGE_KEY = "account_control_store_v2";
+export type Store = {
+  v: 3;
+  accounts: Account[];
+  grants: AuthorityGrant[];
+  audit: AuditEvent[];
+  requests: AuthorityRequest[];
+};
 
+export const STORAGE_KEY = "account_control_store_v3";
+
+/** EN/MM: Permission dictionary for UI labels */
 export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
   { code: "ADMIN_PORTAL_READ", en: "Super Admin portal access", mm: "Super Admin portal ဝင်ခွင့်" },
   { code: "EXEC_COMMAND_READ", en: "Executive command access", mm: "Executive command ဝင်ခွင့်" },
@@ -168,7 +176,7 @@ export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
   { code: "USER_REJECT", en: "Reject requests", mm: "တောင်းဆိုမှု ငြင်းပယ်ရန်" },
   { code: "USER_ROLE_EDIT", en: "Edit roles", mm: "Role ပြောင်းရန်" },
   { code: "USER_BLOCK", en: "Block/Unblock", mm: "ပိတ်/ဖွင့်ရန်" },
-  { code: "AUTHORITY_MANAGE", en: "Manage authorities", mm: "အာဏာများ စီမံရန်" },
+  { code: "AUTHORITY_MANAGE", en: "Manage authorities", mm: "လုပ်ပိုင်ခွင့်များ စီမံရန်" },
   { code: "AUDIT_READ", en: "View audit log", mm: "Audit log ကြည့်ရန်" },
   { code: "BULK_ACTIONS", en: "Bulk actions", mm: "အုပ်စုလိုက်လုပ်ဆောင်မှု" },
   { code: "CSV_IMPORT", en: "CSV import", mm: "CSV သွင်းရန်" },
@@ -177,16 +185,18 @@ export const PERMISSIONS: { code: Permission; en: string; mm: string }[] = [
 
 export const DEFAULT_ROLES: Role[] = [
   "SYS","APP_OWNER","SUPER_ADMIN","ADMIN","ADM","MGR","STAFF",
-  "FINANCE_USER","FINANCE_STAFF","HR_ADMIN","HR",
-  "MARKETING_ADMIN","CUSTOMER_SERVICE",
-  "WAREHOUSE_MANAGER","SUBSTATION_MANAGER","SUPERVISOR",
-  "RIDER","DRIVER","HELPER","RDR",
-  "DATA_ENTRY",
-  "MERCHANT","CUSTOMER"
+  "FINANCE_USER","FINANCE_STAFF","HR_ADMIN","MARKETING_ADMIN","CUSTOMER_SERVICE",
+  "WAREHOUSE_MANAGER","SUBSTATION_MANAGER","SUPERVISOR","DATA_ENTRY",
+  "RIDER","DRIVER","HELPER","MERCHANT","CUSTOMER"
 ];
 
-export function nowIso(): string { return new Date().toISOString(); }
-export function safeLower(v: unknown): string { return String(v ?? "").trim().toLowerCase(); }
+export function nowIso(): string {
+  return new Date().toISOString();
+}
+
+export function safeLower(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
 
 export function uuid(): string {
   const c: any = globalThis.crypto;
@@ -195,7 +205,7 @@ export function uuid(): string {
 }
 
 export function isEmailValid(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email ?? "").trim());
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 export function normalizeRole(role?: string | null): Role {
@@ -213,15 +223,17 @@ export function roleIsPrivileged(role?: string | null): boolean {
   return r === "SYS" || r === "APP_OWNER" || r === "SUPER_ADMIN";
 }
 
+/** EN: initial seed / MY: အစတင် seed */
 export function seedStore(): Store {
   const at = nowIso();
   return {
-    v: 2,
+    v: 3,
     accounts: [
-      { id: uuid(), name: "MD VENTURES", email: "md@britiumventures.com", role: "APP_OWNER", status: "ACTIVE", createdAt: at, createdBy: "SYSTEM" },
+      { id: uuid(), name: "APP OWNER", email: "md@britiumventures.com", role: "APP_OWNER", status: "ACTIVE", createdAt: at, createdBy: "SYSTEM" },
       { id: uuid(), name: "SUPER ADMIN", email: "md@britiumexpress.com", role: "SUPER_ADMIN", status: "ACTIVE", createdAt: at, createdBy: "SYSTEM" },
     ],
     grants: [],
+    requests: [],
     audit: [{ id: uuid(), at, actorEmail: "SYSTEM", action: "STORE_SEEDED", detail: "Initial seed created" }],
   };
 }
@@ -231,9 +243,18 @@ export function loadStore(): Store {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedStore();
-    const s = JSON.parse(raw) as Store;
-    if (!s || !Array.isArray(s.accounts)) return seedStore();
-    return { ...s, v: 2 };
+    const s = JSON.parse(raw) as Partial<Store>;
+
+    const base = seedStore();
+    return {
+      ...base,
+      ...s,
+      v: 3,
+      accounts: Array.isArray(s.accounts) ? (s.accounts as any) : base.accounts,
+      grants: Array.isArray(s.grants) ? (s.grants as any) : [],
+      audit: Array.isArray(s.audit) ? (s.audit as any) : [],
+      requests: Array.isArray((s as any).requests) ? ((s as any).requests as any) : [],
+    };
   } catch {
     return seedStore();
   }
@@ -254,6 +275,11 @@ export function activeGrantsFor(grants: AuthorityGrant[], subjectEmail: string):
   return grants.filter((g) => safeLower(g.subjectEmail) === e && !g.revokedAt);
 }
 
+/**
+ * effectivePermissions (REQUIRED EXPORT)
+ * EN: Returns permissions for an actor from grants; privileged roles get all known perms.
+ * MY: Grant များအရ permissions ပြန်ပေးတယ်; privileged role များက အားလုံးရတယ်။
+ */
 export function effectivePermissions(store: Store, actor: Account | undefined): Set<Permission> {
   if (!actor) return new Set();
   if (roleIsPrivileged(actor.role)) return new Set(PERMISSIONS.map((p) => p.code));
@@ -261,40 +287,41 @@ export function effectivePermissions(store: Store, actor: Account | undefined): 
 }
 
 /**
- * ✅ REQUIRED EXPORT
- * EN: permission check used by AccountControl page
- * MY: AccountControl စာမျက်နှာမှာ သုံးတဲ့ permission စစ်ခြင်း function
+ * can (REQUIRED EXPORT)
+ * EN: Check if actor has permission
+ * MY: actor က permission ရှိ/မရှိ စစ်
  */
 export function can(store: Store, actor: Account | undefined, perm: Permission): boolean {
   return effectivePermissions(store, actor).has(perm);
 }
 
-/**
- * EN: Can apply authority directly (no approval step)?
- * MY: authority ကို တိုက်ရိုက် apply လုပ်ခွင့်ရှိလား (approval မလို)?
- */
-export function canApplyAuthorityDirect(store: Store, actor: Account | undefined, perm: Permission): boolean {
+/** EN/MM: Who can grant which permission? */
+export function canGrantPermission(store: Store, actor: Account | undefined, perm: Permission): boolean {
   if (!actor) return false;
   if (roleIsPrivileged(actor.role)) return true;
-  // must have authority manage + the permission itself
   return can(store, actor, "AUTHORITY_MANAGE") && can(store, actor, perm);
 }
 
-/**
- * EN: Can request authority change (approval flow)?
- * MY: authority change request တင်ခွင့်ရှိလား (approval flow)?
- */
-export function canRequestAuthorityChange(store: Store, actor: Account | undefined): boolean {
+/** EN: helper guards used by AccountControl UI / MY: AccountControl UI အတွက် helper guards */
+export function canApplyAuthorityDirect(store: Store, actor: Account | undefined): boolean {
   if (!actor) return false;
-  if (actor.status !== "ACTIVE") return false;
-  if (actor.security?.blockedAt) return false;
-  return true;
+  if (roleIsPrivileged(actor.role)) return true;
+  return can(store, actor, "AUTHORITY_MANAGE");
 }
 
-/**
- * EN: push audit record into store
- * MY: audit record ထည့်
- */
+export function canRequestAuthorityChange(store: Store, actor: Account | undefined): boolean {
+  if (!actor) return false;
+  // EN: allow ACTIVE accounts to request / MY: ACTIVE အကောင့်များ request တင်ခွင့်
+  return actor.status === "ACTIVE" || actor.status === "PENDING";
+}
+
+export function canRevokeAuthority(store: Store, actor: Account | undefined): boolean {
+  if (!actor) return false;
+  if (roleIsPrivileged(actor.role)) return true;
+  return can(store, actor, "AUTHORITY_MANAGE");
+}
+
+/** EN/MM: Audit log helper */
 export function pushAudit(store: Store, e: Omit<AuditEvent, "id" | "at"> & { at?: string }): Store {
   const evt: AuditEvent = {
     id: uuid(),
@@ -310,15 +337,43 @@ export function pushAudit(store: Store, e: Omit<AuditEvent, "id" | "at"> & { at?
 export function ensureAtLeastOneSuperAdminActive(accounts: Account[]): boolean {
   return accounts.filter((a) => normalizeRole(a.role) === "SUPER_ADMIN" && a.status === "ACTIVE").length >= 1;
 }
+
+/**
+ * EN: Apply grant immediately (optional)
+ * MY: Grant ကို တိုက်ရိုက် apply လုပ်ခြင်း (optional)
+ */
+export function applyAuthorityDirect(store: Store, actor: Account, subjectEmail: string, perm: Permission): Store {
+  const at = nowIso();
+  const g: AuthorityGrant = {
+    id: uuid(),
+    subjectEmail,
+    permission: perm,
+    grantedAt: at,
+    grantedBy: actor.email,
+  };
+  const next = { ...store, grants: [g, ...store.grants] };
+  return pushAudit(next, { actorEmail: actor.email, action: "AUTHORITY_GRANTED", targetEmail: subjectEmail, detail: String(perm) });
+}
+
+/**
+ * EN: Create a request (optional)
+ * MY: Request တင်ခြင်း (optional)
+ */
+export function requestAuthority(store: Store, actor: Account, subjectEmail: string, perm: Permission): Store {
+  const at = nowIso();
+  const req: AuthorityRequest = {
+    id: uuid(),
+    subjectEmail,
+    permission: perm,
+    requestedAt: at,
+    requestedBy: actor.email,
+    status: "PENDING",
+  };
+  const next = { ...store, requests: [req, ...store.requests] };
+  return pushAudit(next, { actorEmail: actor.email, action: "AUTHORITY_REQUESTED", targetEmail: subjectEmail, detail: String(perm) });
+}
 EOF
 
-echo "✅ accountControlStore.ts rewritten with required exports (EN/MM)"
-echo "✅ accountControlStore.ts ကို လိုအပ်တဲ့ export များနဲ့ ပြန်ရေးပြီးပါပြီ (EN/MM)"
-
-echo ""
+echo "✅ accountControlStore.ts rewritten with required exports."
 echo "Next:"
 echo "  npm run build"
-echo "  git add src/lib/accountControlStore.ts"
-echo "  git commit -m \"fix: export can + authority helpers for AccountControl\""
-echo "  git push"
-echo "  npx vercel --prod --force"

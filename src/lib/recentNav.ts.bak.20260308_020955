@@ -1,0 +1,44 @@
+// @ts-nocheck
+/**
+ * recentNav (EN/MM)
+ * EN: localStorage-backed recent navigation helpers for sidebar/hub.
+ * MY: sidebar/hub အတွက် recent navigation ကို localStorage နဲ့သိမ်းတဲ့ helper များ။
+ */
+
+export const RECENT_NAV_KEY = "be_recent_nav";
+
+export type RecentNavItem = {
+  path: string;
+  label_en: string;
+  label_mm: string;
+  timestamp: number;
+};
+
+export function getRecentNav(): RecentNavItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_NAV_KEY);
+    return raw ? (JSON.parse(raw) as RecentNavItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentNav(item: Omit<RecentNavItem, "timestamp">) {
+  if (typeof window === "undefined") return;
+  const current = getRecentNav();
+  const filtered = current.filter((x) => x.path !== item.path);
+  filtered.unshift({ ...item, timestamp: Date.now() });
+  window.localStorage.setItem(RECENT_NAV_KEY, JSON.stringify(filtered.slice(0, 8)));
+}
+
+/**
+ * EN: Compatibility alias for older imports.
+ * MY: အဟောင်း import တွေအတွက် pushRecent alias.
+ */
+export const pushRecent = addRecentNav;
+
+export function clearRecentNav() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(RECENT_NAV_KEY);
+}

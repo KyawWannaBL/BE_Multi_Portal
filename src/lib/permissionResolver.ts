@@ -1,22 +1,26 @@
 // @ts-nocheck
-import { normalizeRole as registryNormalize } from "./portalRegistry";
+import { normalizeRole as _normalizeRole } from "@/lib/portalRegistry";
 
-export function normalizeRole(role) { return registryNormalize(role); }
-export function isPrivilegedRole(role) {
-  const r = normalizeRole(role);
-  return ["SYS", "APP_OWNER", "SUPER_ADMIN"].includes(r);
-}
+/**
+ * permissionResolver (EN/MM)
+ * EN: small helpers used by routing/sidebar.
+ * MY: routing/sidebar အတွက် permission helper များ။
+ */
+export const normalizeRole = _normalizeRole;
 
-export function allowedByRole(auth, allowRoles) {
+export function allowedByRole(role: string | null | undefined, allowRoles?: string[]): boolean {
   if (!allowRoles || allowRoles.length === 0) return true;
-  const r = normalizeRole(auth?.role);
-  if (isPrivilegedRole(r)) return true;
-  return allowRoles.includes(r);
+  const r = _normalizeRole(role);
+  return allowRoles.map((x) => String(x).toUpperCase()).includes(r);
 }
 
-export function hasAnyPermission(auth, perms) {
-  if (!perms || perms.length === 0) return true;
-  if (isPrivilegedRole(auth?.role)) return true;
-  const userPerms = auth?.permissions || [];
-  return perms.some(p => userPerms.includes(p) || userPerms.includes("*"));
+/**
+ * EN: checks auth.permissions array (if present).
+ * MY: auth.permissions array ရှိရင် စစ်ပေးတယ်။
+ */
+export function hasAnyPermission(auth: any, required: string[]): boolean {
+  if (!required || required.length === 0) return true;
+  if (!auth) return false;
+  const perms = Array.isArray(auth.permissions) ? auth.permissions : [];
+  return required.some((r) => perms.includes(r));
 }

@@ -1,0 +1,16 @@
+// @ts-nocheck
+/**
+ * Supabase Helpers (EN/MM)
+ * ----------------------------------------------------------------------------
+ * EN: Small helpers for consistent error handling.
+ * MY: Error handling ကို တစ်ပုံစံတည်းထားဖို့ helper များ။
+ */
+
+export function assertOk(res: any, ctx = "SUPABASE_CALL") {
+  if (!res) throw new Error(`${ctx}: empty response`);
+  if (res.error) {
+    const msg = res.error.message || String(res.error);
+    throw new Error(`${ctx}: ${msg}`);
+  }
+  return res.data;
+}
