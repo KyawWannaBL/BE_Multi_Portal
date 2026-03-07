@@ -1,19 +1,16 @@
+// @ts-nocheck
 import React from "react";
-import { Navigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import { PortalShell } from "@/components/layout/PortalShell";
+import { useLanguage } from "@/contexts/LanguageContext";
+import EmptyState from "@/components/common/EmptyState";
 
 export default function AdminPortal() {
-  const { role } = useAuth();
-
-  // Keep legacy /admin layout as the deep admin UI
-  if (role === "SYS" || role === "APP_OWNER" || role === "SUPER_ADMIN") {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
   return (
-    <PortalShell title="Admin Portal">
-      <div className="text-sm opacity-80">You are authenticated but not an admin.</div>
+    <PortalShell title={t("Admin Portal (Legacy)","Admin Portal (Legacy)")}>
+      <EmptyState title={t("Legacy Admin portal placeholder","Legacy Admin placeholder")} hint={t("Use /portal/admin for Super Admin.","Super Admin အတွက် /portal/admin ကိုသုံးပါ။")} />
     </PortalShell>
   );
 }

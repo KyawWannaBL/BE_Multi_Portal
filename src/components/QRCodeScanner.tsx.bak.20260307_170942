@@ -1,0 +1,11 @@
+import React from "react";
+import { Button } from "./ui/button";
+import { Camera } from "lucide-react";
+export default function QRCodeScanner({ onScan }: any) {
+  return (
+    <div className="bg-black rounded-3xl h-64 flex flex-col items-center justify-center border border-white/10 gap-4 overflow-hidden">
+      <Camera className="h-8 w-8 text-white/20 animate-pulse" />
+      <Button onClick={() => onScan("BE-123456")} className="bg-white/5 border-white/10">Mock Scan (Simulation)</Button>
+    </div>
+  );
+}

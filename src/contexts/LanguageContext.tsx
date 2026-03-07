@@ -1,15 +1,9 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-export type Lang = "en" | "my";
-type Ctx = { lang: Lang; setLanguage: (l: Lang) => void; toggleLang: () => void };
-const KEY = "be_lang";
-const LanguageContext = createContext<Ctx>({ lang: "en", setLanguage: () => {}, toggleLang: () => {} });
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => {
-    if (typeof window === "undefined") return "en";
-    return window.localStorage.getItem(KEY) === "my" ? "my" : "en";
-  });
-  useEffect(() => { if (typeof window !== "undefined") window.localStorage.setItem(KEY, lang); }, [lang]);
-  const value = useMemo(() => ({ lang, setLanguage: (l: Lang) => setLang(l), toggleLang: () => setLang((p) => (p === "en" ? "my" : "en")) }), [lang]);
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
-}
-export function useLanguage() { return useContext(LanguageContext); }
+import React, { createContext, useContext, useState, useEffect } from "react";
+const LanguageContext = createContext<any>(null);
+export const LanguageProvider = ({ children }: any) => {
+  const [lang, setLang] = useState(localStorage.getItem("be_lang") || "en");
+  const toggleLang = () => setLang(l => l === "en" ? "my" : "en");
+  useEffect(() => { localStorage.setItem("be_lang", lang); }, [lang]);
+  return <LanguageContext.Provider value={{ lang, setLanguage: setLang, toggleLang }}>{children}</LanguageContext.Provider>;
+};
+export const useLanguage = () => useContext(LanguageContext);

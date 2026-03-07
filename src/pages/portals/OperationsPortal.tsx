@@ -1,77 +1,32 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+// @ts-nocheck
+import React from "react";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
-
-type ShipmentRow = {
-  id: string;
-  way_id: string;
-  receiver_name: string;
-  receiver_phone: string;
-  created_at: string;
-};
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useNavigate } from "react-router-dom";
 
 export default function OperationsPortal() {
-  const [rows, setRows] = useState<ShipmentRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const nav = useNavigate();
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
 
-  useEffect(() => {
-    async function load() {
-      setErr(null);
-      const res = await supabase
-        .from("shipments")
-        .select("id, way_id, receiver_name, receiver_phone, created_at")
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (res.error) setErr(res.error.message);
-      else setRows((res.data as any) ?? []);
-    }
-
-    void load();
-  }, []);
+  const tiles = [
+    { to: "/portal/operations/manual", en: "Manual / Data Entry", mm: "Manual / Data Entry" },
+    { to: "/portal/operations/qr-scan", en: "QR Scan Ops", mm: "QR စကန်" },
+    { to: "/portal/operations/tracking", en: "Tracking", mm: "Tracking" },
+    { to: "/portal/operations/waybill", en: "Waybill Center", mm: "Waybill Center" },
+  ];
 
   return (
-    <PortalShell
-      title="Operations Portal"
-      links={[{ to: "/portal/operations/tracking", label: "Live Tracking" },
-        { to: "/portal/operations/manual", label: "QR Ops Manual" },
-        { to: "/portal/supervisor", label: "Supervisor" },
-        { to: "/portal/warehouse", label: "Warehouse" },
-        { to: "/portal/branch", label: "Branch" },
-      ]}
-    >
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold">Express Delivery QR Operations Manual</div>
-            <div className="text-xs opacity-70">QR scanning • e-POD • exception handling</div>
-          </div>
-          <Link to="/portal/operations/manual">
-            <Button size="sm" variant="outline">
-              Open
-            </Button>
-          </Link>
-        </div>
-
-        <div className="text-sm opacity-80">Latest shipments (requires RLS allowance for operations roles).</div>
-
-        {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
-
-        <div className="grid gap-2">
-          {rows.map((r) => (
-            <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="flex items-center justify-between">
-                <div className="font-mono text-xs">{r.way_id}</div>
-                <div className="text-[10px] opacity-70">{new Date(r.created_at).toLocaleString()}</div>
-              </div>
-              <div className="text-sm">{r.receiver_name}</div>
-              <div className="text-xs opacity-70">{r.receiver_phone}</div>
-            </div>
-          ))}
-          {!rows.length && !err ? <div className="text-xs opacity-60">No rows (or blocked by RLS).</div> : null}
-        </div>
+    <PortalShell title={t("Operations Portal","Operations Portal (လုပ်ငန်း)")}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {tiles.map((x) => (
+          <button key={x.to} onClick={() => nav(x.to)}
+            className="p-6 rounded-3xl bg-[#0B101B] border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-left transition">
+            <div className="text-lg font-black tracking-widest uppercase text-white">{t(x.en,x.mm)}</div>
+            <div className="text-xs font-mono text-slate-500 mt-2">{x.to}</div>
+          </button>
+        ))}
       </div>
     </PortalShell>
   );

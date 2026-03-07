@@ -40,12 +40,6 @@ APP_BASE_URL=https://www.britiumexpress.com
 # ---- Super Admin recipients ----
 SUPER_ADMIN_EMAILS=md@britiumexpress.com,md@britiumventures.com
 
-# ---- Provider (SendGrid optional) ----
-# EN: If you use SendGrid API, set BOTH. Otherwise leave empty and SMTP will be used.
-# MM: SendGrid API သုံးမယ်ဆိုရင် အောက်က ၂ ခုလုံးထည့်ပါ၊ မသုံးရင် အလွတ်ထားပါ (SMTP သုံးမယ်)
-SENDGRID_API_KEY=
-SENDGRID_FROM="Britium Express <no-reply@britiumexpress.com>"
-
 # ---- SMTP (your hosting) ----
 SMTP_HOST=mailpro-01.zth.netdesignhost.com
 SMTP_PORT=587
@@ -173,3 +167,9 @@ curl -X POST "https://notify.britiumexpress.com/notify" \
     "appBaseUrl":"https://www.britiumexpress.com",
     "payload":{"email":"newuser@britiumexpress.com","role":"ADMIN","note":"Render SMTP test"}
   }'
+### Start
+```bash
+cd server/notify-receiver
+cp .env.example .env
+npm i
+npm run dev

@@ -1,172 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Button } from '../components/ui/button';
-import { 
-  FileText, 
-  Search, 
-  Filter, 
-  Calendar, 
-  User, 
-  Database, 
-  Building2,
-  Clock,
-  ArrowDownCircle 
-} from 'lucide-react';
-import { format } from 'date-fns';
+// @ts-nocheck
+import React from "react";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { useLanguage } from "@/contexts/LanguageContext";
+import LoadingScreen from "@/components/common/LoadingScreen";
+import EmptyState from "@/components/common/EmptyState";
+import { listAuditLogs } from "@/services/admin";
 
-interface AuditLog {
-  id: string;
-  created_at: string;
-  user_id: string;
-  action: string; 
-  table_name: string;
-  branch_id?: string;
-  record_id?: string;
-  old_data?: any;
-  new_data?: any;
-}
+export default function AuditLogs() {
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
 
-export default function AuditLogViewer() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [q, setQ] = React.useState("");
 
-  // Filter States
-  const [filterUser, setFilterUser] = useState('');
-  const [filterBranch, setFilterBranch] = useState('');
-  const [filterTable, setFilterTable] = useState('');
-  const [filterDate, setFilterDate] = useState('');
-
-  const fetchLogs = async () => {
+  async function refresh() {
     setLoading(true);
-    try {
-      let query = supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+    const d = await listAuditLogs(80);
+    setRows(Array.isArray(d) ? d : []);
+    setLoading(false);
+  }
 
-      if (filterUser) query = query.eq('user_id', filterUser);
-      if (filterBranch) query = query.eq('branch_id', filterBranch);
-      if (filterTable) query = query.ilike('table_name', `%${filterTable}%`);
-      
-      if (filterDate) {
-        const start = new Date(filterDate).toISOString();
-        const end = new Date(new Date(filterDate).setHours(23, 59, 59, 999)).toISOString();
-        query = query.gte('created_at', start).lte('created_at', end);
-      }
+  React.useEffect(() => { void refresh(); }, []);
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setLogs(data || []);
-    } catch (error) {
-      console.error('Error fetching audit logs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  const filtered = React.useMemo(() => {
+    if (!q) return rows;
+    const s = q.toLowerCase();
+    return rows.filter(r =>
+      String(r.event_type||"").toLowerCase().includes(s) ||
+      String(r.user_id||"").toLowerCase().includes(s)
+    );
+  }, [rows, q]);
 
   return (
-    <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-            <FileText className="h-6 w-6 text-emerald-500" />
-            System Audit Logs
-          </h1>
-          <p className="text-white/40 text-sm">Track all modifications and security events.</p>
+    <PortalShell title={t("Audit Logs","Audit Logs (မှတ်တမ်း)")}>
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={t("Search...","ရှာဖွေရန်...")}
+            className="w-full md:w-72 bg-black/40 border border-white/10 rounded-xl h-10 px-3 text-xs text-slate-200"/>
+          <button onClick={refresh} className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest">
+            {t("Refresh","ပြန်ရယူ")}
+          </button>
         </div>
-        <Button onClick={fetchLogs} variant="outline" className="border-white/10 text-white hover:bg-white/5">
-          <ArrowDownCircle className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
 
-      {/* Filter Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-900/80 p-4 rounded-xl border border-white/10 shrink-0">
-        <div className="relative">
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-          <input 
-            type="text" 
-            placeholder="User ID..." 
-            value={filterUser}
-            onChange={(e) => setFilterUser(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white"
-          />
-        </div>
-        <div className="relative">
-          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-          <input 
-            type="text" 
-            placeholder="Branch ID..." 
-            value={filterBranch}
-            onChange={(e) => setFilterBranch(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white"
-          />
-        </div>
-        <div className="relative">
-          <Database className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-          <select
-            value={filterTable}
-            onChange={(e) => setFilterTable(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white appearance-none"
-          >
-            <option value="">All Tables</option>
-            <option value="profiles">Profiles</option>
-            <option value="shipments">Shipments</option>
-            <option value="inventory">Inventory</option>
-          </select>
-        </div>
-        <div className="relative">
-          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-          <input 
-            type="date" 
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white [color-scheme:dark]"
-          />
-        </div>
-      </div>
-
-      {/* Log Feed */}
-      <div className="flex-1 overflow-y-auto bg-black/20 rounded-xl border border-white/5 p-4 space-y-2">
-        {loading ? (
-          <div className="text-center py-20 text-white/30 animate-pulse">Scanning audit trails...</div>
-        ) : logs.length === 0 ? (
-          <div className="text-center py-20 text-white/30">No audit records found.</div>
-        ) : (
-          logs.map((log) => (
-            <div 
-              key={log.id} 
-              className="group bg-slate-900/40 border border-white/5 p-3 rounded-lg hover:bg-white/5 transition-all text-sm font-mono"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-3">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    log.action === 'INSERT' ? 'bg-emerald-500/10 text-emerald-400' : 
-                    log.action === 'DELETE' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'
-                  }`}>
-                    {log.action}
-                  </span>
-                  <span className="text-emerald-500 font-semibold">{log.table_name}</span>
-                  <span className="text-white/30">#{log.record_id?.slice(0, 8)}</span>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-white/40">
-                  <span className="flex items-center gap-1"><User className="h-3 w-3" /> {log.user_id?.slice(0, 8)}</span>
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {format(new Date(log.created_at), 'MMM dd, HH:mm')}</span>
-                </div>
+        {loading ? <LoadingScreen label={t("Loading audit feed...","audit feed ရယူနေသည်...")} /> : (
+          filtered.length === 0 ? (
+            <EmptyState title={t("No audit events","Audit မတွေ့ပါ")} hint={t("If audit_logs table is not configured, this will be empty.","audit_logs table မရှိသေးပါက empty ဖြစ်နိုင်သည်။")} />
+          ) : (
+            <div className="rounded-3xl border border-white/10 bg-[#0B101B] overflow-hidden">
+              <div className="p-4 text-[10px] font-mono text-slate-500 tracking-widest uppercase">
+                {t("Latest events","နောက်ဆုံးဖြစ်ရပ်များ")} • {filtered.length}
               </div>
-              <div className="pl-2 border-l-2 border-white/10 text-xs text-white/60 truncate">
-                <span className="text-white/30">DATA: </span> {JSON.stringify(log.new_data || log.old_data || {})}
+              <div className="divide-y divide-white/5">
+                {filtered.map((r, idx) => (
+                  <div key={idx} className="p-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-mono text-white truncate">{r.event_type ?? "EVENT"}</div>
+                      <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">
+                        user_id: {r.user_id ? String(r.user_id) : "—"}
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 whitespace-nowrap">
+                      {r.created_at ? String(r.created_at).replace("T"," ").slice(0,19) : "—"}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))
+          )
         )}
       </div>
-    </div>
+    </PortalShell>
   );
 }

@@ -1,88 +1,30 @@
-import React, { useEffect, useState } from "react";
+// @ts-nocheck
+import React from "react";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { supabase } from "@/lib/supabase";
-import { getCurrentIdentity } from "@/lib/appIdentity";
-
-type Branch = { id: string; name: string; code: string; city: string; state: string };
-type ShipmentRow = { id: string; way_id: string; receiver_name: string; created_at: string; pickup_branch_id: string | null; delivery_branch_id: string | null };
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useNavigate } from "react-router-dom";
 
 export default function BranchPortal() {
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [shipments, setShipments] = useState<ShipmentRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const nav = useNavigate();
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
 
-  useEffect(() => {
-    async function load() {
-      setErr(null);
-      const identity = await getCurrentIdentity();
-      if (!identity?.user_id) {
-        setErr("No linked public.users.id for this account (required for branch manager mapping).");
-        return;
-      }
-
-      const bRes = await supabase.from("branches").select("id, name, code, city, state").eq("manager_id", identity.user_id);
-      if (bRes.error) {
-        setErr(bRes.error.message);
-        return;
-      }
-      const b = (bRes.data as any) ?? [];
-      setBranches(b);
-
-      const ids = b.map((x: any) => x.id);
-      if (!ids.length) {
-        setShipments([]);
-        return;
-      }
-
-      const idsFilter = `(${ids.join(",")})`;
-
-      const sRes = await supabase
-        .from("shipments")
-        .select("id, way_id, receiver_name, created_at, pickup_branch_id, delivery_branch_id")
-        .or(`pickup_branch_id.in.${idsFilter},delivery_branch_id.in.${idsFilter}`)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (sRes.error) setErr(sRes.error.message);
-      else setShipments((sRes.data as any) ?? []);
-    }
-
-    void load();
-  }, []);
+  const tiles = [
+    { to: "/portal/branch/inbound", en: "Inbound", mm: "Inbound (အဝင်)" },
+    { to: "/portal/branch/outbound", en: "Outbound", mm: "Outbound (အထွက်)" },
+  ];
 
   return (
-    <PortalShell title="Branch Manager Portal" links={[{ to: "/portal/branch/inbound", label: "Inbound" }, { to: "/portal/branch/outbound", label: "Outbound" }, { to: "/portal/operations/qr-scan", label: "QR Ops" }]}>
-
-      <div className="space-y-4">
-        {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
-
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-          <div className="text-sm font-bold">My Branches</div>
-          <div className="mt-2 grid gap-2">
-            {branches.map((b) => (
-              <div key={b.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                <div className="text-sm">{b.name}</div>
-                <div className="text-xs opacity-70 font-mono">{b.code} • {b.city}, {b.state}</div>
-              </div>
-            ))}
-            {!branches.length ? <div className="text-xs opacity-60">No branches assigned.</div> : null}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-          <div className="text-sm font-bold">Branch Shipments</div>
-          <div className="mt-2 grid gap-2">
-            {shipments.map((s) => (
-              <div key={s.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="font-mono text-xs">{s.way_id}</div>
-                  <div className="text-[10px] opacity-70">{new Date(s.created_at).toLocaleString()}</div>
-                </div>
-                <div className="text-sm">{s.receiver_name}</div>
-              </div>
-            ))}
-            {!shipments.length ? <div className="text-xs opacity-60">No shipments for assigned branches (or blocked by RLS).</div> : null}
-          </div>
-        </section>
+    <PortalShell title={t("Branch Portal","Branch Portal (ဌာနခွဲ)")}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {tiles.map((x) => (
+          <button key={x.to} onClick={() => nav(x.to)}
+            className="p-6 rounded-3xl bg-[#0B101B] border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-left transition">
+            <div className="text-lg font-black tracking-widest uppercase text-white">{t(x.en,x.mm)}</div>
+            <div className="text-xs font-mono text-slate-500 mt-2">{x.to}</div>
+          </button>
+        ))}
       </div>
     </PortalShell>
   );

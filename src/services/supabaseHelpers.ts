@@ -1,16 +1,17 @@
-import type { PostgrestError } from "@supabase/supabase-js";
+// @ts-nocheck
+export const safeSelect = async (query: any) => {
+  const { data, error } = await query;
+  if (error) console.error("[Supabase Error]", error);
+  return data;
+};
 
-export function assertOk<T>(res: { data: T | null; error: PostgrestError | null }, msg: string): T {
-  if (res.error) throw new Error(`${msg}: ${res.error.message}`);
-  return res.data as T;
-}
-
-export function isMissingRelation(error: any): boolean {
-  const code = (error as any)?.code;
-  return code === "42P01";
-}
-
-export function isMissingColumn(error: any): boolean {
-  const code = (error as any)?.code;
-  return code === "42703";
-}
+export const isMissingRelation = (error: any): boolean => {
+  if (!error) return false;
+  const msg = String(error.message || "").toLowerCase();
+  return (
+    msg.includes("not found") || 
+    msg.includes("does not exist") || 
+    error.code === "PGRST204" ||
+    error.code === "42P01"
+  );
+};

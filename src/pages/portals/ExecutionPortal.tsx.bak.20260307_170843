@@ -1,0 +1,2 @@
+import React from "react";
+export default function Page() { return <div className="p-20 text-center text-white bg-[#05080F]">Restored: ExecutionPortal.tsx</div>; }

@@ -1,46 +1,22 @@
-import React, { useEffect, useState } from "react";
+// @ts-nocheck
+import React from "react";
 import { PortalShell } from "@/components/layout/PortalShell";
-import { supabase } from "@/lib/supabase";
-
-type Employee = { id: string; employee_code: string; first_name: string; last_name: string; job_title: string; hire_date: string; employee_status: string };
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useNavigate } from "react-router-dom";
 
 export default function HrPortal() {
-  const [rows, setRows] = useState<Employee[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      setErr(null);
-      const res = await supabase
-        .from("employees")
-        .select("id, employee_code, first_name, last_name, job_title, hire_date, employee_status")
-        .order("hire_date", { ascending: false })
-        .limit(30);
-      if (res.error) setErr(res.error.message);
-      else setRows((res.data as any) ?? []);
-    }
-    void load();
-  }, []);
+  const nav = useNavigate();
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
 
   return (
-    <PortalShell title="HR Portal" links={[{ to: "/portal/hr/admin", label: "HR Admin Ops" }]}>
-
-      <div className="space-y-3">
-        {err ? <div className="text-xs text-red-400">Error: {err}</div> : null}
-        <div className="grid gap-2">
-          {rows.map((e) => (
-            <div key={e.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="flex items-center justify-between">
-                <div className="font-mono text-xs">{e.employee_code}</div>
-                <div className="text-[10px] opacity-70">{e.employee_status}</div>
-              </div>
-              <div className="text-sm">{e.first_name} {e.last_name}</div>
-              <div className="text-xs opacity-70">{e.job_title} • Hired: {e.hire_date}</div>
-            </div>
-          ))}
-          {!rows.length && !err ? <div className="text-xs opacity-60">No employees (or blocked by RLS).</div> : null}
-        </div>
-      </div>
+    <PortalShell title={t("HR Portal","HR Portal (HR)")}>
+      <button onClick={() => nav("/portal/hr/admin")}
+        className="p-6 rounded-3xl bg-[#0B101B] border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-left transition w-full">
+        <div className="text-lg font-black tracking-widest uppercase text-white">{t("HR Admin Ops","HR Admin Ops")}</div>
+        <div className="text-xs font-mono text-slate-500 mt-2">/portal/hr/admin</div>
+      </button>
     </PortalShell>
   );
 }

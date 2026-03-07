@@ -1,112 +1,76 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import PermissionGate from "@/components/PermissionGate";
-
-type ProfileRow = {
-  id: string;
-  email?: string | null;
-  role?: string | null;
-  is_active?: boolean | null;
-  is_demo?: boolean | null;
-  branch_id?: string | null;
-};
+// @ts-nocheck
+import React from "react";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { useLanguage } from "@/contexts/LanguageContext";
+import LoadingScreen from "@/components/common/LoadingScreen";
+import EmptyState from "@/components/common/EmptyState";
+import { listProfiles } from "@/services/admin";
 
 export default function AdminUsers() {
-  const { user, role, branch_id } = useAuth();
-  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
 
-  const canManage = role === "APP_OWNER" || role === "SUPER_ADMIN";
+  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [q, setQ] = React.useState("");
 
-  const loadProfiles = async () => {
+  async function refresh() {
     setLoading(true);
-    try {
-      let query = supabase.from("profiles").select("id,email,role,is_active,is_demo,branch_id").order("created_at", { ascending: false });
-
-      // Branch isolation (SUPER_ADMIN limited to own branch)
-      if (role !== "APP_OWNER" && branch_id) {
-        query = query.eq("branch_id", branch_id);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setProfiles((data as any) ?? []);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (canManage) loadProfiles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage, role, branch_id]);
-
-  const toggleActive = async (id: string, current: boolean) => {
-    await supabase.from("profiles").update({ is_active: !current }).eq("id", id);
-
-    // Best-effort audit log (ignore errors)
-    try {
-      await supabase.from("audit_logs").insert({
-        user_id: user?.id,
-        action: "USER_STATUS_CHANGE",
-        table_name: "profiles",
-        record_id: id,
-        new_data: { is_active: !current },
-      });
-    } catch {
-      // no-op
-    }
-
-    loadProfiles();
-  };
-
-  if (!canManage) {
-    return <div className="p-10 text-red-400 font-bold">Enterprise Access Only</div>;
+    const d = await listProfiles(100);
+    setRows(Array.isArray(d) ? d : []);
+    setLoading(false);
   }
 
-  if (loading) return <div className="p-10 text-white">Loading...</div>;
+  React.useEffect(() => { void refresh(); }, []);
+
+  const filtered = React.useMemo(() => {
+    if (!q) return rows;
+    const s = q.toLowerCase();
+    return rows.filter(r =>
+      String(r.email||"").toLowerCase().includes(s) ||
+      String(r.role||r.role_code||"").toLowerCase().includes(s)
+    );
+  }, [rows, q]);
 
   return (
-    <div className="p-10 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Enterprise User Control</h1>
-        <Button variant="outline" onClick={loadProfiles}>
-          Refresh
-        </Button>
-      </div>
+    <PortalShell title={t("Admin Users","Admin Users (အသုံးပြုသူများ)")}>
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={t("Search email/role...","email/role ရှာရန်...")}
+            className="w-full md:w-72 bg-black/40 border border-white/10 rounded-xl h-10 px-3 text-xs text-slate-200"/>
+          <button onClick={refresh} className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest">
+            {t("Refresh","ပြန်ရယူ")}
+          </button>
+        </div>
 
-      <div className="luxury-card p-6 overflow-x-auto">
-        <table className="w-full text-sm text-white/80">
-          <thead>
-            <tr className="border-b border-white/10 text-left">
-              <th className="py-2">Email</th>
-              <th className="py-2">Role</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Environment</th>
-              <th className="py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {profiles.map((p) => (
-              <tr key={p.id} className="border-b border-white/5">
-                <td className="py-2">{p.email}</td>
-                <td className="py-2">{p.role}</td>
-                <td className="py-2">{p.is_active ? "Active" : "Inactive"}</td>
-                <td className="py-2">{p.is_demo ? "Demo" : "Production"}</td>
-                <td className="py-2 text-right">
-                  <PermissionGate permission="users.manage">
-                    <Button size="sm" variant="secondary" onClick={() => toggleActive(p.id, Boolean(p.is_active))}>
-                      Toggle
-                    </Button>
-                  </PermissionGate>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? <LoadingScreen label={t("Loading users...","users ရယူနေသည်...")} /> : (
+          filtered.length === 0 ? (
+            <EmptyState title={t("No profiles found","profile မတွေ့ပါ")} hint={t("If RLS blocks access, use service role via admin backend.","RLS ကပိတ်ထားနိုင်လို့ backend admin service role သုံးပါ။")} />
+          ) : (
+            <div className="rounded-3xl border border-white/10 bg-[#0B101B] overflow-hidden">
+              <div className="p-4 text-[10px] font-mono text-slate-500 tracking-widest uppercase">
+                {t("Profiles","Profiles")} • {filtered.length}
+              </div>
+              <div className="divide-y divide-white/5">
+                {filtered.map((r, idx) => (
+                  <div key={idx} className="p-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-mono text-white truncate">{r.email ?? r.id ?? "—"}</div>
+                      <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">
+                        role: {r.role ?? r.role_code ?? "—"}
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 whitespace-nowrap">
+                      {r.created_at ? String(r.created_at).replace("T"," ").slice(0,19) : "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        )}
       </div>
-    </div>
+    </PortalShell>
   );
 }

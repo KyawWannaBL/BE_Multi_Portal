@@ -38,22 +38,19 @@ DNS: CNAME `notify` -> Render service hostname
 
 ### 5) Quick test
 ```bash
-curl -X POST "[https://notify.britiumexpress.com/notify](https://notify.britiumexpress.com/notify)" \
+curl -X POST "https://notify.britiumexpress.com/notify" \
   -H "content-type: application/json" \
   -H "x-notify-secret:whk-d6lgfjf5r7bs7399nk30" \
   -d '{
     "event":"ACCOUNT_REQUEST_CREATED",
     "at":"2026-01-01T00:00:00.000Z",
     "actorEmail":"test@britiumexpress.com",
-    "appBaseUrl":"[https://www.britiumexpress.com](https://www.britiumexpress.com)",
+    "appBaseUrl":"https://www.britiumexpress.com",
     "payload":{"email":"newuser@britiumexpress.com","role":"ADMIN","note":"Render SMTP test"}
   }'
-```
-
 ### Start
 ```bash
 cd server/notify-receiver
 cp .env.example .env
 npm i
 npm run dev
-```
