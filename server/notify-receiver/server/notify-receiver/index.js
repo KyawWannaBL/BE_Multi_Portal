@@ -2,7 +2,6 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import nodemailer from "nodemailer";
-import sgMail from "@sendgrid/mail";
 import { subjectFor, htmlFor } from "./emailTemplates.js";
 
 const app = express();
@@ -26,11 +25,7 @@ const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || "")
 // Optional Slack
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 
-// SendGrid (preferred)
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
-const SENDGRID_FROM = process.env.SENDGRID_FROM || "";
-
-// SMTP fallback
+// SMTP Config
 const SMTP_HOST = process.env.SMTP_HOST || "";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER || "";
@@ -93,10 +88,6 @@ async function sendSlack(event, body) {
   }
 }
 
-function sendgridEnabled() {
-  return Boolean(SENDGRID_API_KEY && SENDGRID_FROM);
-}
-
 function smtpEnabled() {
   return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 }
@@ -111,35 +102,24 @@ function createSmtpTransport() {
 }
 
 async function sendEmail({ to, subject, html }) {
-  if (sendgridEnabled()) {
-    sgMail.setApiKey(SENDGRID_API_KEY);
-    await sgMail.send({
-      to,
-      from: SENDGRID_FROM,
-      subject,
-      html,
-    });
-    return { provider: "sendgrid" };
+  if (!smtpEnabled()) {
+    throw new Error("NO_EMAIL_PROVIDER_CONFIGURED");
   }
 
-  if (smtpEnabled()) {
-    const transport = createSmtpTransport();
-    await transport.sendMail({
-      from: MAIL_FROM,
-      to,
-      subject,
-      html,
-    });
-    return { provider: "smtp" };
-  }
-
-  throw new Error("NO_EMAIL_PROVIDER_CONFIGURED");
+  const transport = createSmtpTransport();
+  await transport.sendMail({
+    from: MAIL_FROM,
+    to,
+    subject,
+    html,
+  });
+  return { provider: "smtp" };
 }
 
 app.get("/healthz", (_, res) => {
   res.json({
     ok: true,
-    emailProvider: sendgridEnabled() ? "sendgrid" : smtpEnabled() ? "smtp" : "none",
+    emailProvider: smtpEnabled() ? "smtp" : "none",
   });
 });
 
@@ -172,12 +152,11 @@ app.post("/notify", async (req, res) => {
       ok: false,
       error: "MAIL_SEND_FAILED",
       detail: String(err?.message || err),
-      hint:
-        "Configure SendGrid: SENDGRID_API_KEY + SENDGRID_FROM OR SMTP: SMTP_HOST/USER/PASS and SUPER_ADMIN_EMAILS and APP_BASE_URL",
+      hint: "Configure SMTP: SMTP_HOST, SMTP_USER, SMTP_PASS, SUPER_ADMIN_EMAILS, and APP_BASE_URL",
     });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`[notify-receiver] :${PORT} provider=${sendgridEnabled() ? "sendgrid" : smtpEnabled() ? "smtp" : "none"}`);
+  console.log(`[notify-receiver] :${PORT} provider=${smtpEnabled() ? "smtp" : "none"}`);
 });
