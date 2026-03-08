@@ -54,3 +54,13 @@ export async function listAssignedShipments() {
   if (error) throw error;
   return data || [];
 }
+
+// Restored for src/services/approvals.ts
+export async function addTrackingNote(shipmentId: string, note: string, ...args: any[]) {
+  const { data, error } = await supabase
+    .from("tracking_events")
+    .insert([{ shipment_id: shipmentId, note }])
+    .select();
+  if (error) console.error("Error adding tracking note:", error);
+  return data;
+}
