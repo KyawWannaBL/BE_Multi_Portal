@@ -5,7 +5,8 @@ import { loadStore, getAccountByEmail, roleIsPrivileged } from "@/lib/accountCon
 import { NAV_SECTIONS, type NavItem } from "@/lib/portalRegistry";
 import { hasAnyPermission } from "@/lib/permissionResolver";
 
-export default function RequireAuthz() {
+// ✅ Removed "default" here so it exports exactly as App.tsx expects
+export function RequireAuthz() {
   const { user } = useAuth();
   const location = useLocation();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -36,11 +37,9 @@ export default function RequireAuthz() {
       const currentRoute = allNavItems.find(item => location.pathname.startsWith(item.href));
 
       if (currentRoute && currentRoute.requiredPermissions) {
-        // Use the resolver to check if the role has the needed permissions
         const hasAccess = hasAnyPermission(account.role, currentRoute.requiredPermissions);
         setAuthorized(hasAccess);
       } else {
-        // If no specific permissions are defined for the route, allow access
         setAuthorized(true);
       }
     }
