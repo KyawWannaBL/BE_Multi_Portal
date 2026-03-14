@@ -1,0 +1,44 @@
+Enterprise Portals (11 Total)
+These portals serve as the primary entry points for different departments and external partners:
+
+Admin Portal (/portal/admin): Reserved for high-level system oversight.
+
+Operations Portal (/portal/operations): Central hub for shipment management and tracking.
+
+Finance Portal (/portal/finance): For managing corporate accounts and transactions.
+
+Execution Portal (/portal/execution): Designed for logistics personnel like riders and drivers.
+
+HR Portal (/portal/hr): Manages employee records and organizational structure.
+
+Marketing Portal (/portal/marketing): For promotional and growth-related data.
+
+Support Portal (/portal/support): Used by customer service agents.
+
+Supervisor Portal (/portal/supervisor): For overseeing regional or team operations.
+
+Warehouse Portal (/portal/warehouse): Specifically for stock and inventory management.
+
+Branch Portal (/portal/branch): For substation and branch managers.
+
+Merchant/Customer Portals (/portal/merchant, /portal/customer): External interfaces for clients and partners.
+
+🛠️ Legacy Admin Platform
+In addition to the modern portals, there is a Legacy Admin Route (/admin) that contains deep-level management modules:
+
+SuperAdmin Dashboard: Overall system health.
+
+Account Control: Managing user approvals and access.
+
+Fleet Command: Oversight of delivery vehicles.
+
+Omni Finance: Advanced financial controls.
+
+Live Map: Real-time tracking of all active shipments.
+
+🔐 Access and Security
+Portal Redirection: Upon a successful login via the L5 Secure Gateway, the system automatically identifies your role and directs you to the correct portal.
+
+Authorization Requirement: Every portal is protected by a RequireRole guard. For example, a user with the RIDER role can access the Execution Portal but will be blocked from the Finance Portal.
+
+Bilingual Support: All portals support the English/Myanmar toggle to accommodate different regional users.

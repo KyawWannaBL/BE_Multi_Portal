@@ -1,0 +1,52 @@
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) || "";
+
+function buildUrl(path, query) {
+  const url = new URL(API_BASE ? `${API_BASE}${path}` : path, window.location.origin);
+
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+
+  return url.toString();
+}
+
+export async function getJson(path, query) {
+  const url = buildUrl(path, query);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return { items: [], total: 0, page: 1, pageSize: 20, summary: {} };
+  }
+
+  const data = await response.json();
+
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      page: Number(query?.page || 1),
+      pageSize: Number(query?.pageSize || 20),
+      summary: {},
+    };
+  }
+
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || query?.page || 1),
+    pageSize: Number(data?.pageSize || query?.pageSize || 20),
+    summary: data?.summary || {},
+  };
+}

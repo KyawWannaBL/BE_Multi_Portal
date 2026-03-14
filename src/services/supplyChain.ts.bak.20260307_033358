@@ -1,0 +1,97 @@
+// @ts-nocheck
+/**
+ * Supply Chain Service (EN/MM)
+ * ----------------------------------------------------------------------------
+ * EN: Build-stable stubs. Replace with real Supabase/RPC logic later.
+ * MY: Build မပျက်အောင် stub များ။ နောက်မှ Supabase/RPC logic နဲ့ အစားထိုးနိုင်။
+ */
+
+export type SupplyEvent = {
+  id?: string;
+  way_id?: string;
+  shipment_id?: string;
+  event_type?: string;
+  notes?: string;
+  at?: string;
+  meta?: any;
+};
+
+export type CodItem = {
+  way_id: string;
+  shipment_id?: string;
+  cod_amount?: number;
+  status?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_city?: string;
+};
+
+/**
+ * EN: Trace supply events by waybill id
+ * MY: Waybill ID အလိုက် supply events ကို ရယူမယ်
+ */
+export async function traceByWayId(wayId: any): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] traceByWayId:", wayId);
+  return [];
+}
+
+/**
+ * EN: Finance reconciliation - pending COD list
+ * MY: Finance reconcile အတွက် pending COD list
+ */
+export async function listPendingCod(...args: any[]): Promise<CodItem[]> {
+  console.log("[supplyChain] listPendingCod:", args);
+  return [];
+}
+
+/**
+ * EN: Create deposit record
+ * MY: Deposit record ဖန်တီးမယ်
+ */
+export async function createDeposit(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createDeposit:", args);
+  return { success: true, id: `dep_${Date.now()}` };
+}
+
+/**
+ * EN: Create COD collection record
+ * MY: COD collection record ဖန်တီးမယ်
+ */
+export async function createCodCollection(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createCodCollection:", args);
+  return { success: true, id: `cod_${Date.now()}` };
+}
+
+/**
+ * EN: Record a supply chain event (QR ops / warehouse / branch / execution)
+ * MY: Supply chain event မှတ်တမ်းတင်မယ် (QR ops / warehouse / branch / execution)
+ */
+export async function recordSupplyEvent(...args: any[]): Promise<{ success: boolean }> {
+  console.log("[supplyChain] recordSupplyEvent:", args);
+  return { success: true };
+}
+
+/**
+ * ✅ EN: List my recent events (used by QROpsConsole.tsx)
+ * ✅ MY: မိမိ recent events စာရင်း (QROpsConsole.tsx မှာသုံး)
+ */
+export async function listMyRecentEvents(...args: any[]): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] listMyRecentEvents:", args);
+  return [];
+}
+
+/**
+ * EN/MM: Compatibility aliases (in case other files import older names)
+ */
+export const listPendingCOD = listPendingCod;
+export const recordEvent = recordSupplyEvent;
+export const listRecentEvents = listMyRecentEvents;
+
+export default {
+  traceByWayId,
+  listPendingCod,
+  createDeposit,
+  createCodCollection,
+  recordSupplyEvent,
+  listMyRecentEvents,
+};

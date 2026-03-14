@@ -1,0 +1,630 @@
+'use client';
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { AlertTriangle, CheckCircle2, ClipboardCopy, Download, History, Key, Lock, RefreshCw, Search, ShieldCheck, Upload, UserCog, UserPlus, XCircle } from "lucide-react";
+import { DEFAULT_ROLES, PERMISSIONS, STORAGE_KEY, type Account, type AccountStatus, type Permission, type Role, activeGrantsFor, can, canGrantPermission, csvParse, csvStringify, effectivePermissions, ensureAtLeastOneSuperAdminActive, getAccountByEmail, isEmailValid, loadStore, nowIso, pushAudit, roleIsPrivileged, safeLower, saveStore, uuid } from "@/lib/accountControlStore";
+
+type Toast = { type: "ok" | "err" | "warn"; msg: string };
+
+function Modal(props: { open: boolean; title: string; onClose: () => void; widthClass?: string; children: React.ReactNode }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!props.open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props.open, props.onClose]);
+
+  useEffect(() => {
+    if (props.open) setTimeout(() => panelRef.current?.focus(), 0);
+  }, [props.open]);
+
+  if (!props.open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={props.onClose} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" className={`relative w-full ${props.widthClass ?? "max-w-3xl"} rounded-[2rem] bg-[#05080F] ring-1 ring-white/10 shadow-2xl outline-none max-h-[90vh] overflow-y-auto custom-scrollbar`}>
+        <div className="flex items-center justify-between p-6 border-b border-white/5 sticky top-0 bg-[#05080F] z-10">
+          <div>
+            <div className="text-white font-black uppercase italic">{props.title}</div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">enterprise_identity_governance</div>
+          </div>
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={props.onClose}>
+            <XCircle className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="p-6">{props.children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Pill(props: { children: React.ReactNode; className?: string }) {
+  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black tracking-tighter ${props.className ?? ""}`}>{props.children}</span>;
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`h-11 w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
+}
+
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`min-h-[92px] w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={`h-11 w-full rounded-xl bg-[#0B101B] border border-white/10 px-4 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${props.className ?? ""}`} />;
+}
+
+function Divider() {
+  return <div className="h-px w-full bg-white/5 my-4" />;
+}
+
+function formatStatus(status: AccountStatus): { label: string; cls: string } {
+  switch (status) {
+    case "ACTIVE": return { label: "ACTIVE", cls: "text-emerald-400" };
+    case "PENDING": return { label: "PENDING", cls: "text-amber-400" };
+    case "SUSPENDED": return { label: "SUSPENDED", cls: "text-rose-400" };
+    case "REJECTED": return { label: "REJECTED", cls: "text-rose-400" };
+    case "ARCHIVED": return { label: "ARCHIVED", cls: "text-slate-500" };
+    default: return { label: status, cls: "text-slate-400" };
+  }
+}
+
+function roleBadgeClass(role: Role): string {
+  if (role === "SYS" || role === "APP_OWNER") return "bg-emerald-500/10 text-emerald-400";
+  if (role === "SUPER_ADMIN") return "bg-sky-500/10 text-sky-400";
+  if (role === "ADMIN" || role === "ADM" || role === "MGR") return "bg-amber-500/10 text-amber-300";
+  return "bg-white/5 text-slate-300";
+}
+
+function downloadBlob(filename: string, contentType: string, data: string) {
+  const blob = new Blob([data], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export default function AccountControl() {
+  const { lang } = useLanguage();
+  const auth = useAuth() as any;
+  const t = (en: string, mm: string) => (lang === "en" ? en : mm);
+
+  const [store, setStore] = useState(() => loadStore());
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  const actorEmail = (auth?.user?.email ?? "") as string;
+  const actor = useMemo(() => (actorEmail ? getAccountByEmail(store.accounts, actorEmail) : undefined), [store.accounts, actorEmail]);
+  const actorPerms = useMemo(() => effectivePermissions(store, actor), [store, actor]);
+
+  useEffect(() => saveStore(store), [store]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
+  const canRead = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_READ");
+  const canCreate = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_CREATE");
+  const canApprove = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_APPROVE");
+  const canReject = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_REJECT");
+  const canRoleEdit = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_ROLE_EDIT");
+  const canBlock = !!actor && actor.status === "ACTIVE" && can(store, actor, "USER_BLOCK");
+  const canAuth = !!actor && actor.status === "ACTIVE" && can(store, actor, "AUTHORITY_MANAGE");
+  const canAudit = !!actor && actor.status === "ACTIVE" && can(store, actor, "AUDIT_READ");
+  const canExport = !!actor && actor.status === "ACTIVE" && can(store, actor, "CSV_EXPORT");
+  const canImport = !!actor && actor.status === "ACTIVE" && can(store, actor, "CSV_IMPORT");
+  const canBulk = !!actor && actor.status === "ACTIVE" && can(store, actor, "BULK_ACTIONS");
+
+  const [q, setQ] = useState("");
+  const [filterStatus, setFilterStatus] = useState<AccountStatus | "ALL">("ALL");
+  const [filterRole, setFilterRole] = useState<Role | "ALL">("ALL");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const selectedEmails = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+
+  const [modalCreate, setModalCreate] = useState(false);
+  const [modalAudit, setModalAudit] = useState(false);
+  const [modalAuthorityEmail, setModalAuthorityEmail] = useState<string | null>(null);
+  const [modalProfileEmail, setModalProfileEmail] = useState<string | null>(null);
+  const [modalApproveEmail, setModalApproveEmail] = useState<string | null>(null);
+  const [modalRejectEmail, setModalRejectEmail] = useState<string | null>(null);
+  const [modalImport, setModalImport] = useState(false);
+  const [modalBulk, setModalBulk] = useState(false);
+
+  function auditPush(action: string, targetEmail?: string, detail?: string) {
+    setStore((prev) => pushAudit(prev, { actorEmail: actorEmail || "UNKNOWN", action, targetEmail, detail }));
+  }
+
+  const filtered = useMemo(() => {
+    const qq = safeLower(q);
+    return store.accounts
+      .filter((a) => {
+        if (filterStatus !== "ALL" && a.status !== filterStatus) return false;
+        if (filterRole !== "ALL" && a.role !== filterRole) return false;
+        if (!qq) return true;
+        return safeLower(a.name).includes(qq) || safeLower(a.email).includes(qq);
+      })
+      .sort((a, b) => safeLower(a.email).localeCompare(safeLower(b.email)));
+  }, [store.accounts, q, filterStatus, filterRole]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = useMemo(() => {
+    const p = Math.min(page, totalPages);
+    const start = (p - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, totalPages]);
+
+  useEffect(() => setPage(1), [q, filterStatus, filterRole]);
+
+  function upsertAccount(next: Account) {
+    setStore((prev) => ({ ...prev, accounts: prev.accounts.map((a) => (safeLower(a.email) === safeLower(next.email) ? next : a)) }));
+  }
+
+  function addAccount(acc: Account) {
+    setStore((prev) => ({ ...prev, accounts: [acc, ...prev.accounts] }));
+  }
+
+  function approve(email: string, note?: string) {
+    if (!actor || !canApprove) return;
+    const target = getAccountByEmail(store.accounts, email);
+    if (!target) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    const next: Account = { ...target, status: "ACTIVE", approval: { requestedAt: target.approval?.requestedAt ?? target.createdAt, requestedBy: target.approval?.requestedBy ?? target.createdBy, processedAt: nowIso(), processedBy: actorEmail, decision: "APPROVED", note } };
+    upsertAccount(next);
+    auditPush("REQUEST_APPROVED", email, note ?? "Approved");
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function reject(email: string, note?: string) {
+    if (!actor || !canReject) return;
+    const target = getAccountByEmail(store.accounts, email);
+    if (!target) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    const next: Account = { ...target, status: "REJECTED", approval: { requestedAt: target.approval?.requestedAt ?? target.createdAt, requestedBy: target.approval?.requestedBy ?? target.createdBy, processedAt: nowIso(), processedBy: actorEmail, decision: "REJECTED", note } };
+    upsertAccount(next);
+    auditPush("REQUEST_REJECTED", email, note ?? "Rejected");
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function blockToggle(email: string, block: boolean) {
+    if (!actor || !canBlock) return;
+    const target = getAccountByEmail(store.accounts, email);
+    if (!target) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    const next: Account = { ...target, status: block ? "SUSPENDED" : "ACTIVE", security: { ...(target.security ?? {}), blockedAt: block ? nowIso() : undefined, blockedBy: block ? actorEmail : undefined } };
+    upsertAccount(next);
+    auditPush(block ? "ACCOUNT_BLOCKED" : "ACCOUNT_UNBLOCKED", email, `By ${actorEmail}`);
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function changeRole(email: string, role: Role) {
+    if (!actor || !canRoleEdit) return;
+    const target = getAccountByEmail(store.accounts, email);
+    if (!target) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(target.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    const next: Account = { ...target, role };
+    const nextAccounts = store.accounts.map((a) => (safeLower(a.email) === safeLower(email) ? next : a));
+    if (!ensureAtLeastOneSuperAdminActive(nextAccounts)) { setToast({ type: "err", msg: "Must keep at least one ACTIVE SUPER_ADMIN." }); return; }
+    setStore((prev) => ({ ...prev, accounts: nextAccounts }));
+    auditPush("ROLE_CHANGED", email, `Role -> ${role}`);
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function grantPermission(subjectEmail: string, permission: Permission) {
+    if (!actor || !canAuth) return;
+    if (!canGrantPermission(store, actor, permission)) { setToast({ type: "err", msg: "You cannot grant a permission you don't own." }); return; }
+    const subject = getAccountByEmail(store.accounts, subjectEmail);
+    if (!subject) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(subject.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    const exists = store.grants.some((g) => safeLower(g.subjectEmail) === safeLower(subjectEmail) && g.permission === permission && !g.revokedAt);
+    if (exists) return;
+    setStore((prev) => ({ ...prev, grants: [{ id: uuid(), subjectEmail, permission, grantedAt: nowIso(), grantedBy: actorEmail }, ...prev.grants] }));
+    auditPush("AUTHORITY_GRANTED", subjectEmail, `${permission}`);
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function revokePermission(subjectEmail: string, permission: Permission) {
+    if (!actor || !canAuth) return;
+    const subject = getAccountByEmail(store.accounts, subjectEmail);
+    if (!subject) return;
+    if (!roleIsPrivileged(actor.role) && roleIsPrivileged(subject.role)) { setToast({ type: "err", msg: "Cannot modify privileged accounts." }); return; }
+    setStore((prev) => ({ ...prev, grants: prev.grants.map((g) => { if (safeLower(g.subjectEmail) !== safeLower(subjectEmail)) return g; if (g.permission !== permission) return g; if (g.revokedAt) return g; return { ...g, revokedAt: nowIso(), revokedBy: actorEmail }; }) }));
+    auditPush("AUTHORITY_REVOKED", subjectEmail, `${permission}`);
+    setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+  }
+
+  function exportAccountsCsv() {
+    const header = ["name", "email", "role", "status", "department", "phone", "employeeId", "createdAt", "createdBy"];
+    const rows: string[][] = [header];
+    for (const a of filtered) { rows.push([a.name ?? "", a.email ?? "", a.role ?? "", a.status ?? "", a.department ?? "", a.phone ?? "", a.employeeId ?? "", a.createdAt ?? "", a.createdBy ?? ""]); }
+    downloadBlob(`accounts_${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8", csvStringify(rows));
+    auditPush("CSV_EXPORT_ACCOUNTS", undefined, `Rows=${filtered.length}`);
+  }
+
+  function exportGrantsCsv() {
+    const header = ["subjectEmail", "permission", "grantedAt", "grantedBy", "revokedAt", "revokedBy"];
+    const rows: string[][] = [header];
+    for (const g of store.grants) { rows.push([g.subjectEmail, String(g.permission), g.grantedAt, g.grantedBy, g.revokedAt ?? "", g.revokedBy ?? ""]); }
+    downloadBlob(`authorities_${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8", csvStringify(rows));
+    auditPush("CSV_EXPORT_AUTHORITIES", undefined, `Rows=${store.grants.length}`);
+  }
+
+  function selectAllOnPage(checked: boolean) {
+    const next = { ...selected };
+    for (const a of paged) next[a.email] = checked;
+    setSelected(next);
+  }
+
+  function clearSelection() { setSelected({}); }
+
+  const CreateModal = () => {
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [role, setRole] = useState<Role>("STAFF");
+    const [department, setDepartment] = useState("");
+    const [phone, setPhone] = useState("");
+    const [employeeId, setEmployeeId] = useState("");
+    const [note, setNote] = useState("");
+
+    function submit() {
+      if (!actor || !canCreate) return;
+      const em = email.trim();
+      if (!name.trim() || !isEmailValid(em)) { setToast({ type: "err", msg: t("Please check required fields.", "လိုအပ်သော အချက်အလက်များ စစ်ဆေးပါ။") }); return; }
+      if (getAccountByEmail(store.accounts, em)) { setToast({ type: "err", msg: t("Email already exists.", "Email ရှိပြီးသားဖြစ်သည်။") }); return; }
+      const createdAt = nowIso();
+      const acc: Account = { id: uuid(), name: name.trim(), email: em, role, status: "PENDING", department: department.trim() || undefined, phone: phone.trim() || undefined, employeeId: employeeId.trim() || undefined, createdAt, createdBy: actorEmail, approval: { requestedAt: createdAt, requestedBy: actorEmail, note: note.trim() || undefined } };
+      addAccount(acc);
+      auditPush("REQUEST_CREATED", em, note.trim() || "Created");
+      setModalCreate(false);
+      setToast({ type: "ok", msg: t("Saved.", "သိမ်းပြီးပါပြီ။") });
+    }
+
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Full name", "အမည်")}</div><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Email", "Email")}</div><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Role", "Role")}</div><Select value={role} onChange={(e) => setRole(e.target.value as Role)}>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Department", "ဌာန")}</div><Input value={department} onChange={(e) => setDepartment(e.target.value)} /></div>
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Phone", "ဖုန်း")}</div><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+          <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Employee ID", "ဝန်ထမ်း ID")}</div><Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} /></div>
+        </div>
+        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Reason / Note", "အကြောင်းရင်း / မှတ်ချက်")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
+        <Divider />
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalCreate(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
+          <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase" onClick={submit}>{t("Save", "သိမ်းမည်")}</Button>
+        </div>
+      </div>
+    );
+  };
+
+  const AuthorityModal = ({ email }: { email: string }) => {
+    const subject = getAccountByEmail(store.accounts, email);
+    if (!subject) return null;
+    const subjectPerms = roleIsPrivileged(subject.role) ? new Set(PERMISSIONS.map((p) => p.code)) : new Set(activeGrantsFor(store.grants, subject.email).map((g) => g.permission));
+    return (
+      <div className="space-y-5">
+        <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+          <div className="flex items-center justify-between gap-3">
+            <div><div className="text-white font-black uppercase italic">{subject.name}</div><div className="text-sm text-slate-500">{subject.email}</div></div>
+            <Pill className={roleBadgeClass(subject.role)}>{subject.role}</Pill>
+          </div>
+          {!roleIsPrivileged(actor?.role) && roleIsPrivileged(subject.role) ? (
+            <div className="mt-3 flex items-center gap-2 text-amber-300 text-sm"><AlertTriangle className="h-4 w-4" /> Privileged accounts can only be modified by SYS/APP_OWNER/SUPER_ADMIN.</div>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {PERMISSIONS.map((p) => {
+            const enabled = subjectPerms.has(p.code);
+            const disabled = !actor || !canAuth || (roleIsPrivileged(subject.role) && !roleIsPrivileged(actor.role)) || (!roleIsPrivileged(actor.role) && !canGrantPermission(store, actor, p.code));
+            return (
+              <div key={String(p.code)} className={`p-4 rounded-2xl border ${enabled ? "border-sky-500/20 bg-sky-500/5" : "border-white/10 bg-white/5"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-white font-bold">{lang === "en" ? p.en : p.mm}</div>
+                    <div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{String(p.code)}</div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input type="checkbox" checked={enabled} disabled={disabled} onChange={(e) => { if (e.target.checked) grantPermission(subject.email, p.code); else revokePermission(subject.email, p.code); }} className="h-4 w-4 accent-sky-500 disabled:opacity-50" />
+                    {enabled ? "ON" : "OFF"}
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalAuthorityEmail(null)}>{t("Close", "ပိတ်")}</Button></div>
+      </div>
+    );
+  };
+
+  const AuditModal = () => {
+    const events = store.audit.slice(0, 200);
+    return (
+      <div className="space-y-4">
+        <div className="text-sm text-slate-500">Showing latest {events.length} events (max 200).</div>
+        <div className="space-y-2 max-h-[60vh] overflow-auto pr-1 custom-scrollbar">
+          {events.map((e) => (
+            <div key={e.id} className="p-3 rounded-2xl bg-[#0B101B] border border-white/10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-white font-bold">{e.action}</div>
+                <div className="text-[10px] font-mono text-slate-600">{new Date(e.at).toLocaleString()}</div>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">Actor: <span className="text-slate-300">{e.actorEmail}</span>{e.targetEmail ? <> {" "}• Target: <span className="text-slate-300">{e.targetEmail}</span></> : null}</div>
+              {e.detail ? <div className="mt-1 text-xs text-slate-600">{e.detail}</div> : null}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalAudit(false)}>{t("Close", "ပိတ်")}</Button></div>
+      </div>
+    );
+  };
+
+  const ApproveRejectModal = ({ email, mode }: { email: string; mode: "approve" | "reject" }) => {
+    const target = getAccountByEmail(store.accounts, email);
+    const [note, setNote] = useState("");
+    if (!target) return null;
+    return (
+      <div className="space-y-4">
+        <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+          <div className="flex items-center justify-between gap-3">
+            <div><div className="text-white font-black uppercase italic">{target.name}</div><div className="text-sm text-slate-500">{target.email}</div></div>
+            <Pill className={roleBadgeClass(target.role)}>{target.role}</Pill>
+          </div>
+          <div className="mt-3 text-xs text-slate-600">Requested by: <span className="text-slate-400">{target.approval?.requestedBy ?? target.createdBy}</span></div>
+        </div>
+        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Reason / Note", "အကြောင်းရင်း / မှတ်ချက်")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => (mode === "approve" ? setModalApproveEmail(null) : setModalRejectEmail(null))}>{t("Cancel", "မလုပ်တော့")}</Button>
+          <Button className={`${mode === "approve" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-rose-600 hover:bg-rose-500"} text-white font-black h-11 px-6 rounded-xl uppercase`} onClick={() => { if (mode === "approve") approve(email, note.trim() || undefined); else reject(email, note.trim() || undefined); setModalApproveEmail(null); setModalRejectEmail(null); }}>{mode === "approve" ? t("Approve", "အတည်ပြု") : t("Reject", "ငြင်းပယ်")}</Button>
+        </div>
+      </div>
+    );
+  };
+
+  const ImportModal = () => {
+    const [fileName, setFileName] = useState("");
+    const [preview, setPreview] = useState<{ ok: number; skipped: number; errors: string[]; rows: Account[] } | null>(null);
+    async function onPick(file: File | null) {
+      if (!file) return;
+      setFileName(file.name);
+      const text = await file.text();
+      const parsed = csvParse(text);
+      const header = parsed[0]?.map((h) => safeLower(h));
+      if (!header || header.length < 2) { setPreview({ ok: 0, skipped: 0, errors: ["Invalid CSV header."], rows: [] }); return; }
+      const idx = (key: string) => header.indexOf(safeLower(key));
+      const iName = idx("name"); const iEmail = idx("email"); const iRole = idx("role"); const iDept = idx("department"); const iPhone = idx("phone"); const iEmp = idx("employeeId");
+      const errors: string[] = []; const rows: Account[] = []; let skipped = 0;
+      for (let r = 1; r < parsed.length; r++) {
+        const row = parsed[r];
+        const name = (row[iName] ?? "").trim();
+        const email = (row[iEmail] ?? "").trim();
+        const role = ((row[iRole] ?? "STAFF").trim() as Role) || "STAFF";
+        const department = (row[iDept] ?? "").trim();
+        const phone = (row[iPhone] ?? "").trim();
+        const employeeId = (row[iEmp] ?? "").trim();
+        if (!name || !isEmailValid(email)) { errors.push(`Row ${r + 1}: invalid name/email`); continue; }
+        if (getAccountByEmail(store.accounts, email)) { skipped++; continue; }
+        const createdAt = nowIso();
+        rows.push({ id: uuid(), name, email, role: DEFAULT_ROLES.includes(role) ? role : "STAFF", status: "PENDING", department: department || undefined, phone: phone || undefined, employeeId: employeeId || undefined, createdAt, createdBy: actorEmail || "UNKNOWN", approval: { requestedAt: createdAt, requestedBy: actorEmail || "UNKNOWN" } });
+      }
+      setPreview({ ok: rows.length, skipped, errors, rows });
+    }
+    function doImport() {
+      if (!actor || !canImport || !preview) return;
+      setStore((prev) => ({ ...prev, accounts: [...preview.rows, ...prev.accounts] }));
+      auditPush("CSV_IMPORT_ACCOUNTS", undefined, `Imported=${preview.ok} Skipped=${preview.skipped} Errors=${preview.errors.length}`);
+      setToast({ type: "ok", msg: t("Import completed.", "သွင်းပြီးပါပြီ။") });
+      setModalImport(false);
+    }
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="text-sm text-slate-500">{t("CSV columns:", "CSV ကော်လံများ:")} name,email,role,department,phone,employeeId</div>
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+            <Button type="button" className="bg-sky-600 hover:bg-sky-500 text-white font-black h-10 px-4 rounded-xl uppercase pointer-events-none"><Upload className="h-4 w-4 mr-2" />{fileName ? fileName : t("Pick CSV", "CSV ရွေး")}</Button>
+          </label>
+        </div>
+        {preview ? (
+          <div className="p-4 rounded-2xl bg-[#0B101B] border border-white/10 space-y-2">
+            <div className="text-sm text-slate-300">OK: <span className="text-emerald-300 font-bold">{preview.ok}</span> • Skipped: <span className="text-amber-300 font-bold">{preview.skipped}</span> • Errors: <span className="text-rose-300 font-bold">{preview.errors.length}</span></div>
+            {preview.errors.length ? <div className="text-xs text-rose-300 font-mono space-y-1">{preview.errors.slice(0, 6).map((e) => (<div key={e}>{e}</div>))}</div> : null}
+          </div>
+        ) : null}
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalImport(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!preview?.ok} onClick={doImport}>{t("Confirm", "အတည်ပြု")}</Button>
+        </div>
+      </div>
+    );
+  };
+
+  const BulkModal = () => {
+    const [action, setAction] = useState<"APPROVE" | "REJECT" | "BLOCK" | "UNBLOCK" | "SET_ROLE">("APPROVE");
+    const [note, setNote] = useState("");
+    const [role, setRole] = useState<Role>("STAFF");
+    function apply() {
+      if (!actor || !canBulk) return;
+      if (!selectedEmails.length) return;
+      for (const email of selectedEmails) {
+        if (action === "APPROVE") approve(email, note.trim() || undefined);
+        if (action === "REJECT") reject(email, note.trim() || undefined);
+        if (action === "BLOCK") blockToggle(email, true);
+        if (action === "UNBLOCK") blockToggle(email, false);
+        if (action === "SET_ROLE") changeRole(email, role);
+      }
+      auditPush("BULK_APPLIED", undefined, `Action=${action} Count=${selectedEmails.length}`);
+      clearSelection();
+      setModalBulk(false);
+    }
+    return (
+      <div className="space-y-4">
+        <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+          <div className="text-slate-300">{t("Selected", "ရွေးထား")}: <span className="font-black text-white">{selectedEmails.length}</span></div>
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={clearSelection}><RefreshCw className="h-4 w-4 mr-2" /> Clear</Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Action", "လုပ်ဆောင်ချက်")}</div>
+            <Select value={action} onChange={(e) => setAction(e.target.value as any)}>
+              <option value="APPROVE">{t("Approve", "အတည်ပြု")}</option><option value="REJECT">{t("Reject", "ငြင်းပယ်")}</option><option value="BLOCK">{t("Block", "ပိတ်")}</option><option value="UNBLOCK">{t("Unblock", "ဖွင့်")}</option><option value="SET_ROLE">{t("Set role", "Role သတ်မှတ်")}</option>
+            </Select>
+          </div>
+          {action === "SET_ROLE" ? (<div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Role", "Role")}</div><Select value={role} onChange={(e) => setRole(e.target.value as Role)}>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>) : (<div />)}
+        </div>
+        <div className="space-y-1"><div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">{t("Note (optional)", "မှတ်ချက် (optional)")}</div><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></div>
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalBulk(false)}>{t("Cancel", "မလုပ်တော့")}</Button>
+          <Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-11 px-6 rounded-xl uppercase disabled:opacity-40" disabled={!selectedEmails.length} onClick={apply}>{t("Apply", "လုပ်ဆောင်")}</Button>
+        </div>
+      </div>
+    );
+  };
+
+  const ProfileModal = ({ email }: { email: string }) => {
+    const target = getAccountByEmail(store.accounts, email);
+    if (!target) return null;
+    const grants = activeGrantsFor(store.grants, target.email);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div><div className="text-white font-black uppercase italic">{target.name}</div><div className="text-slate-500 text-sm">{target.email}</div></div>
+          <div className="flex items-center gap-2"><Pill className={roleBadgeClass(target.role)}>{target.role}</Pill><Pill className="bg-white/5 text-slate-300">{target.department ?? "-"}</Pill></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">STATUS</div><div className={`mt-2 font-black ${formatStatus(target.status).cls}`}>{formatStatus(target.status).label}</div></Card>
+          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">CREATED</div><div className="mt-2 text-sm text-slate-200">{new Date(target.createdAt).toLocaleString()}</div><div className="text-xs text-slate-600">{target.createdBy}</div></Card>
+          <Card className="bg-[#0B101B] border-none ring-1 ring-white/10 rounded-2xl p-4"><div className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">AUTHORITIES</div><div className="mt-2 text-sm text-slate-200">{roleIsPrivileged(target.role) ? "ALL" : grants.length}</div><div className="text-xs text-slate-600">{roleIsPrivileged(target.role) ? "Privileged" : "Delegated"}</div></Card>
+        </div>
+        <Divider />
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-widest text-slate-500 font-mono">Authorities</div>
+          <div className="flex flex-wrap gap-2">
+            {roleIsPrivileged(target.role) ? (<Pill className="bg-sky-500/10 text-sky-400">ALL_PERMISSIONS</Pill>) : grants.length ? (grants.map((g) => (<Pill key={g.id} className="bg-white/5 text-slate-200">{String(g.permission)}</Pill>))) : (<div className="text-sm text-slate-600">No delegated permissions.</div>)}
+          </div>
+        </div>
+        <div className="flex justify-end"><Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setModalProfileEmail(null)}>{t("Close", "ပိတ်")}</Button></div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-6 md:p-10 space-y-6 bg-[#0B101B] min-h-screen text-slate-300">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-[#05080F] p-6 md:p-8 rounded-[2.5rem] border border-white/5">
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-sky-500/10 rounded-2xl"><UserPlus className="text-sky-500 h-8 w-8" /></div>
+          <div>
+            <h1 className="text-3xl font-black text-white uppercase italic">{t("Account Control", "အကောင့်ထိန်းချုပ်မှု")}</h1>
+            <p className="text-sky-500 font-mono text-[10px] uppercase tracking-widest italic">{t("Enterprise Identity Governance", "လုပ်ငန်းသုံး Identity Governance")}</p>
+            <p className="text-xs text-slate-500 mt-1">{actorEmail ? `${t("Signed in as", "ဝင်ထားသည်")}: ${actorEmail}` : t("Not signed in", "ဝင်မထားပါ")}</p>
+            {actor ? (<p className="text-[10px] text-slate-600 font-mono mt-1">ROLE: {actor.role} • STATUS: {actor.status} • PERMS: {roleIsPrivileged(actor.role) ? "ALL" : Array.from(actorPerms).join(", ") || "—"}</p>) : (<p className="text-xs text-amber-300 mt-1 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{t("Session user not registered in Account Registry.", "Session user သည် Registry ထဲတွင် မရှိပါ။")}</p>)}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:gap-4">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <input className="bg-[#0B101B] border border-white/10 rounded-full h-12 pl-12 pr-6 text-sm w-full md:w-72" placeholder={t("Search accounts...", "အကောင့်ရှာရန်...")} value={q} onChange={(e) => setQ(e.target.value)} disabled={!canRead} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {canExport ? (<><Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={exportAccountsCsv}><Download className="h-4 w-4 mr-2" />{t("Export CSV", "CSV ထုတ်ရန်")}</Button><Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={exportGrantsCsv}><Download className="h-4 w-4 mr-2" />Authorities CSV</Button></>) : null}
+            {canImport ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalImport(true)}><Upload className="h-4 w-4 mr-2" />{t("Import CSV", "CSV သွင်းရန်")}</Button>) : null}
+            {canBulk ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalBulk(true)}><ShieldCheck className="h-4 w-4 mr-2" />{t("Bulk Actions", "အုပ်စုလိုက်")}</Button>) : null}
+            {canAudit ? (<Button className="bg-white/5 hover:bg-white/10 text-white font-black h-12 px-5 rounded-xl uppercase" onClick={() => setModalAudit(true)}><History className="h-4 w-4 mr-2" />{t("Audit Log", "Audit Log")}</Button>) : null}
+            {canCreate ? (<Button className="bg-sky-600 hover:bg-sky-500 text-white font-black h-12 px-6 rounded-xl uppercase" onClick={() => setModalCreate(true)}>{t("Create Account", "အကောင့်အသစ်ဖွင့်မည်")}</Button>) : null}
+          </div>
+        </div>
+      </div>
+
+      {toast ? (
+        <div className={`rounded-2xl border px-4 py-3 text-sm flex items-center gap-2 ${toast.type === "ok" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300" : toast.type === "warn" ? "border-amber-500/20 bg-amber-500/5 text-amber-300" : "border-rose-500/20 bg-rose-500/5 text-rose-300"}`}>
+          {toast.type === "ok" ? <CheckCircle2 className="h-4 w-4" /> : toast.type === "warn" ? <AlertTriangle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}<div>{toast.msg}</div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Pill className="bg-white/5 text-slate-300">{t("Filters", "စစ်ထုတ်မှု")}</Pill>
+          <div className="flex items-center gap-2"><div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{t("Status", "အခြေအနေ")}</div><Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="w-44" disabled={!canRead}><option value="ALL">ALL</option><option value="ACTIVE">ACTIVE</option><option value="PENDING">PENDING</option><option value="SUSPENDED">SUSPENDED</option><option value="REJECTED">REJECTED</option><option value="ARCHIVED">ARCHIVED</option></Select></div>
+          <div className="flex items-center gap-2"><div className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">{t("Role", "Role")}</div><Select value={filterRole} onChange={(e) => setFilterRole(e.target.value as any)} className="w-52" disabled={!canRead}><option value="ALL">ALL</option>{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</Select></div>
+          <Button variant="ghost" className="h-11 text-slate-400 hover:text-white" onClick={() => { setQ(""); setFilterStatus("ALL"); setFilterRole("ALL"); setToast({ type: "ok", msg: t("Reset.", "ပြန်ချ") }); }} disabled={!canRead}><RefreshCw className="h-4 w-4 mr-2" />{t("Reset", "ပြန်ချ")}</Button>
+        </div>
+        <div className="text-xs text-slate-600 font-mono">STORE: {STORAGE_KEY}</div>
+      </div>
+
+      {!canRead ? (
+        <Card className="bg-[#05080F] border-none ring-1 ring-white/5 rounded-[2rem] p-6"><div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5 text-amber-300" /><div><div className="text-white font-black uppercase italic">{t("Access denied", "ဝင်ရောက်ခွင့်မရှိပါ")}</div><div className="text-sm text-slate-500">{t("Super Admin must grant you USER_READ.", "Super Admin မှ USER_READ အာဏာပေးရပါမည်။")}</div></div></div></Card>
+      ) : (
+        <Card className="bg-[#05080F] border-none ring-1 ring-white/5 rounded-[3rem] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-white/5 font-mono text-slate-500 uppercase text-[10px] tracking-[0.2em]">
+                <tr>
+                  <th className="p-6"><label className="inline-flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-sky-500" checked={paged.length > 0 && paged.every((a) => selected[a.email])} onChange={(e) => selectAllOnPage(e.target.checked)} disabled={!canBulk} />{t("Select", "ရွေးချယ်")}</label></th>
+                  <th className="p-6">{t("Personnel Info", "ဝန်ထမ်းအချက်အလက်")}</th>
+                  <th className="p-6">{t("Role / Authority", "Role / Authority")}</th>
+                  <th className="p-6">{t("Status", "အခြေအနေ")}</th>
+                  <th className="p-6 text-right">{t("Actions", "လုပ်ဆောင်မှု")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {paged.map((user) => {
+                  const st = formatStatus(user.status);
+                  const blocked = user.status === "SUSPENDED";
+                  return (
+                    <tr key={user.email} className="hover:bg-white/5 transition-all">
+                      <td className="p-6"><input type="checkbox" className="h-4 w-4 accent-sky-500" checked={!!selected[user.email]} disabled={!canBulk} onChange={(e) => setSelected((prev) => ({ ...prev, [user.email]: e.target.checked }))} /></td>
+                      <td className="p-6"><p className="font-bold text-white uppercase italic">{user.name}</p><p className="text-xs text-slate-500">{user.email}</p><div className="mt-2 flex flex-wrap gap-2">{user.department ? <Pill className="bg-white/5 text-slate-300">{user.department}</Pill> : null}{user.employeeId ? <Pill className="bg-white/5 text-slate-300">{user.employeeId}</Pill> : null}{user.phone ? <Pill className="bg-white/5 text-slate-300">{user.phone}</Pill> : null}</div></td>
+                      <td className="p-6"><Pill className={roleBadgeClass(user.role)}>{user.role}</Pill>{user.status === "PENDING" ? (<div className="mt-2 text-xs text-slate-600">Pending approval • <span className="text-slate-500">{user.approval?.requestedBy ?? user.createdBy}</span></div>) : null}<div className="mt-2 text-xs text-slate-600">Authorities: <span className="text-slate-300">{roleIsPrivileged(user.role) ? "ALL" : activeGrantsFor(store.grants, user.email).length}</span></div></td>
+                      <td className="p-6"><span className={`text-[10px] font-bold italic ${st.cls}`}>{st.label}</span></td>
+                      <td className="p-6 text-right space-x-1 md:space-x-2">
+                        <Button variant="ghost" className="h-10 text-slate-500 hover:text-white" title="View" onClick={() => setModalProfileEmail(user.email)}><UserCog size={16} /></Button>
+                        <Button variant="ghost" className="h-10 text-slate-500 hover:text-white disabled:opacity-40" title="Authority" disabled={!canAuth} onClick={() => setModalAuthorityEmail(user.email)}><ShieldCheck size={16} /></Button>
+                        <Button variant="ghost" className={`h-10 ${blocked ? "text-emerald-400 hover:bg-emerald-500/10" : "text-rose-500 hover:bg-rose-500/10"} disabled:opacity-40`} title={blocked ? "Unblock" : "Block"} disabled={!canBlock} onClick={() => blockToggle(user.email, !blocked)}><Lock size={16} /></Button>
+                        {canRoleEdit ? (<select className="h-10 rounded-xl bg-[#0B101B] border border-white/10 px-3 text-xs text-slate-200 ml-2" value={user.role} onChange={(e) => changeRole(user.email, e.target.value as Role)} title="Role">{DEFAULT_ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}</select>) : null}
+                        {user.status === "PENDING" ? (<><Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-10 px-4 rounded-xl uppercase disabled:opacity-40 ml-2" disabled={!canApprove} onClick={() => setModalApproveEmail(user.email)}>{t("Approve", "အတည်ပြု")}</Button><Button className="bg-rose-600 hover:bg-rose-500 text-white font-black h-10 px-4 rounded-xl uppercase disabled:opacity-40" disabled={!canReject} onClick={() => setModalRejectEmail(user.email)}>{t("Reject", "ငြင်းပယ်")}</Button></>) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filtered.length === 0 ? <div className="p-10 text-center text-slate-600">{t("No accounts found.", "အကောင့်မတွေ့ပါ။")}</div> : null}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-white/5">
+            <div className="text-xs text-slate-600 font-mono">{filtered.length} total • page {Math.min(page, totalPages)} / {totalPages}</div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" className="h-10 text-slate-400 hover:text-white disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+              <Button variant="ghost" className="h-10 text-slate-400 hover:text-white disabled:opacity-40" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <Modal open={modalCreate} title={t("Create account request", "အကောင့်တောင်းဆိုမှု ဖန်တီးရန်")} onClose={() => setModalCreate(false)} widthClass="max-w-3xl"><CreateModal /></Modal>
+      <Modal open={!!modalAuthorityEmail} title={t("Manage authorities", "အာဏာများ စီမံရန်")} onClose={() => setModalAuthorityEmail(null)} widthClass="max-w-4xl">{modalAuthorityEmail ? <AuthorityModal email={modalAuthorityEmail} /> : null}</Modal>
+      <Modal open={!!modalProfileEmail} title={t("Account profile", "အကောင့်အချက်အလက်")} onClose={() => setModalProfileEmail(null)} widthClass="max-w-3xl">{modalProfileEmail ? <ProfileModal email={modalProfileEmail} /> : null}</Modal>
+      <Modal open={!!modalApproveEmail} title={t("Approve request", "တောင်းဆိုမှု အတည်ပြုရန်")} onClose={() => setModalApproveEmail(null)} widthClass="max-w-2xl">{modalApproveEmail ? <ApproveRejectModal email={modalApproveEmail} mode="approve" /> : null}</Modal>
+      <Modal open={!!modalRejectEmail} title={t("Reject request", "တောင်းဆိုမှု ငြင်းပယ်ရန်")} onClose={() => setModalRejectEmail(null)} widthClass="max-w-2xl">{modalRejectEmail ? <ApproveRejectModal email={modalRejectEmail} mode="reject" /> : null}</Modal>
+      <Modal open={!!modalAudit} title={t("Audit Log", "Audit Log")} onClose={() => setModalAudit(false)} widthClass="max-w-3xl"><AuditModal /></Modal>
+      <Modal open={modalImport} title={t("Import CSV", "CSV သွင်းရန်")} onClose={() => setModalImport(false)} widthClass="max-w-3xl"><ImportModal /></Modal>
+      <Modal open={modalBulk} title={t("Bulk actions", "အုပ်စုလိုက်လုပ်ဆောင်မှု")} onClose={() => setModalBulk(false)} widthClass="max-w-3xl"><BulkModal /></Modal>
+    </div>
+  );
+}

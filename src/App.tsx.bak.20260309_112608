@@ -1,0 +1,223 @@
+// @ts-nocheck
+/**
+ * App Router (EN/MM) - Consolidated Warehouse Platform
+ */
+
+import React, { Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
+
+import { LanguageProvider } from "./contexts/LanguageContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+
+// Core Pages
+import EnterprisePortal from "./pages/EnterprisePortal";
+import Login from "./pages/Login"; 
+import SignUp from "./pages/SignUp";
+import ResetPassword from "./pages/ResetPassword";
+import Unauthorized from "./pages/Unauthorized";
+import DashboardRedirect from "./pages/DashboardRedirect";
+import Diagnostics from "./pages/Diagnostics";
+
+// Admin hub
+import SuperAdminPortal from "./pages/portals/admin/SuperAdminPortal";
+import AdminModuleWrapper from "./pages/portals/admin/AdminModuleWrapper";
+import ExecutiveCommandCenter from "./pages/portals/admin/ExecutiveCommandCenter";
+
+// Execution
+import ExecutionScanPage from "@/pages/portals/execution/ExecutionScanPage";
+import ExecutionPortal from "./pages/portals/ExecutionPortal";
+import ExecutionNavigationPage from "./pages/portals/ExecutionNavigationPage";
+import ExecutionManualPage from "./pages/portals/execution/ExecutionManualPage";
+
+// Admin modules
+import AccountControl from "./pages/AccountControl";
+import AdminDashboard from "./pages/AdminDashboard";
+import AuditLogs from "./pages/AuditLogs";
+import AdminUsers from "./pages/AdminUsers";
+import PermissionAssignment from "./pages/PermissionAssignment";
+
+// Portals 
+import AdminPortal from "./pages/portals/AdminPortal";
+import OperationsPortal from "./pages/portals/OperationsPortal";
+import OperationsTrackingPage from "./pages/portals/OperationsTrackingPage";
+import FinancePortal from "./pages/portals/FinancePortal";
+import FinanceReconPage from "./pages/portals/finance/FinanceReconPage";
+import HrPortal from "./pages/portals/HrPortal";
+import HrAdminOpsPage from "./pages/portals/hr/HrAdminOpsPage";
+import MarketingPortal from "./pages/portals/MarketingPortal";
+import SupportPortal from "./pages/portals/SupportPortal";
+import BranchPortal from "./pages/portals/BranchPortal";
+import BranchInboundPage from "./pages/portals/branch/BranchInboundPage";
+import BranchOutboundPage from "./pages/portals/branch/BranchOutboundPage";
+import SupervisorPortal from "./pages/portals/SupervisorPortal";
+import SupervisorApprovalPage from "./pages/portals/supervisor/SupervisorApprovalPage";
+import SupervisorFraudPage from "./pages/portals/supervisor/SupervisorFraudPage";
+import MerchantPortal from "./pages/portals/MerchantPortal";
+import CustomerPortal from "./pages/portals/CustomerPortal";
+import DataEntryOpsPage from "./pages/portals/operations/DataEntryOpsPage";
+import QROpsScanPage from "./pages/portals/operations/QROpsScanPage";
+import WaybillCenterPage from "./pages/portals/operations/WaybillCenterPage";
+
+// Warehouse Platform Components
+import WarehousePortal from "./pages/portals/WarehousePortal";
+import ControllerDashboard from "./pages/portals/warehouse/ControllerDashboard";
+import ControllerTaskBoard from "./pages/portals/warehouse/ControllerTaskBoard";
+import ControllerMasterData from "./pages/portals/warehouse/ControllerMasterData";
+import ControllerInbound from "./pages/portals/warehouse/ControllerInbound";
+import ControllerOutbound from "./pages/portals/warehouse/ControllerOutbound";
+import ControllerInventory from "./pages/portals/warehouse/ControllerInventory";
+import ControllerReports from "./pages/portals/warehouse/ControllerReports";
+import ControllerPutawayRules from "./pages/portals/warehouse/ControllerPutawayRules";
+import StaffHome from "./pages/portals/warehouse/StaffHome";
+import StaffInbound from "./pages/portals/warehouse/StaffInbound";
+import StaffOutbound from "./pages/portals/warehouse/StaffOutbound";
+import StaffCycleCount from "./pages/portals/warehouse/StaffCycleCount";
+
+// --- 🚨 Universal Security Gateway ---
+const SecurityGateway = () => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#05080F] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" />
+    </div>
+  );
+
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+
+  const userRole = (user.role || user.app_role || "GUEST").toUpperCase();
+  const rawLevel = user.role_level || "L0";
+  const userLevel = rawLevel === "EXT" ? 0 : (parseInt(rawLevel.replace("L", ""), 10) || 0);
+  const path = location.pathname;
+
+  if (userRole === "SYS" || userRole === "SUPER_ADMIN") return <Outlet />;
+
+  // Explicit Role Mapping for Staff Bypass
+  const roleAccessMap: Record<string, string[]> = {
+    "/portal/finance": ["FINANCE_SENIOR", "FINANCE_USER", "FINANCE_MGR"],
+    "/portal/operations": ["OPT_MGR", "DATA_ENTRY", "STAFF", "HUB_MANAGER"],
+    "/portal/execution": ["RIDER", "DRIVER"],
+    "/portal/supervisor": ["SUPERVISOR", "HUB_MANAGER"],
+    "/portal/merchant": ["MERCHANT"],
+    "/portal/customer": ["CUSTOMER"],
+    "/portal/branch": ["HUB_MANAGER", "STAFF"],
+    "/portal/warehouse": [
+        "WAREHOUSE_MGR", "STAFF", "WAREHOUSE", "WAREHOUSE_CONTROLLER", 
+        "WH_CONTROLLER", "WAREHOUSE_SUPERVISOR", "WH_SUP", "WH_STAFF"
+    ]
+  };
+
+  let hasExplicitAccess = false;
+  for (const [basePath, allowedRoles] of Object.entries(roleAccessMap)) {
+    if (path.startsWith(basePath) && allowedRoles.includes(userRole)) {
+      hasExplicitAccess = true;
+      break;
+    }
+  }
+
+  if (hasExplicitAccess) return <Outlet />;
+
+  // Level-Based Fallback
+  let requiredLevel = 99;
+  if (path.startsWith("/portal/admin")) requiredLevel = 5;
+  else if (path.startsWith("/portal/finance") || path.startsWith("/portal/hr")) requiredLevel = 4;
+  else if (path.startsWith("/portal/operations") || path.startsWith("/portal/supervisor") || path.startsWith("/portal/warehouse")) requiredLevel = 3;
+  else if (path.startsWith("/portal/execution")) requiredLevel = 1;
+
+  if (userLevel >= requiredLevel) return <Outlet />;
+
+  return <Navigate to="/unauthorized" replace />;
+};
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <Suspense fallback={
+          <div className="min-h-screen bg-[#05080F] flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent animate-spin rounded-full" />
+          </div>
+        }>
+          <Router>
+            <Routes>
+              {/* --- Public Routes --- */}
+              <Route path="/" element={<EnterprisePortal />} />
+              <Route path="/dashboard" element={<DashboardRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/portal-access" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+              <Route path="/diag" element={<Diagnostics />} />
+
+              {/* --- Protected RBAC Routes --- */}
+              <Route element={<SecurityGateway />}>
+                {/* Admin */}
+                <Route path="/portal/admin" element={<SuperAdminPortal />} />
+                <Route path="/portal/admin/executive" element={<ExecutiveCommandCenter />} />
+                <Route path="/portal/admin/accounts" element={<AdminModuleWrapper title="Account Control"><AccountControl /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/dashboard" element={<AdminModuleWrapper title="Admin Dashboard"><AdminDashboard /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/audit" element={<AdminModuleWrapper title="Audit Logs"><AuditLogs /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/users" element={<AdminModuleWrapper title="Admin Users"><AdminUsers /></AdminModuleWrapper>} />
+                <Route path="/portal/admin/permission-assignment" element={<AdminModuleWrapper title="Permission Assignment"><PermissionAssignment /></AdminModuleWrapper>} />
+                <Route path="/portal/admin-legacy" element={<AdminPortal />} />
+
+                {/* Operations */}
+                <Route path="/portal/operations" element={<OperationsPortal />} />
+                <Route path="/portal/operations/manual" element={<DataEntryOpsPage />} />
+                <Route path="/portal/operations/qr-scan" element={<QROpsScanPage />} />
+                <Route path="/portal/operations/tracking" element={<OperationsTrackingPage />} />
+                <Route path="/portal/operations/waybill" element={<WaybillCenterPage />} />
+
+                {/* Finance */}
+                <Route path="/portal/finance" element={<FinancePortal />} />
+                <Route path="/portal/finance/recon" element={<FinanceReconPage />} />
+
+                {/* Execution */}
+                <Route path="/portal/execution" element={<ExecutionPortal />} />
+                <Route path="/portal/execution/navigation" element={<ExecutionNavigationPage />} />
+                <Route path="/portal/execution/manual" element={<ExecutionManualPage />} />
+                <Route path="/portal/execution/scan" element={<ExecutionScanPage />} />
+
+                {/* Warehouse Platform (Controller) */}
+                <Route path="/portal/warehouse" element={<WarehousePortal />} />
+                <Route path="/portal/warehouse/controller" element={<ControllerDashboard />} />
+                <Route path="/portal/warehouse/controller/tasks" element={<ControllerTaskBoard />} />
+                <Route path="/portal/warehouse/controller/master" element={<ControllerMasterData />} />
+                <Route path="/portal/warehouse/controller/inbound" element={<ControllerInbound />} />
+                <Route path="/portal/warehouse/controller/outbound" element={<ControllerOutbound />} />
+                <Route path="/portal/warehouse/controller/inventory" element={<ControllerInventory />} />
+                <Route path="/portal/warehouse/controller/reports" element={<ControllerReports />} />
+                <Route path="/portal/warehouse/controller/putaway-rules" element={<ControllerPutawayRules />} />
+
+                {/* Warehouse Platform (Staff) */}
+                <Route path="/portal/warehouse/staff" element={<StaffHome />} />
+                <Route path="/portal/warehouse/staff/inbound" element={<StaffInbound />} />
+                <Route path="/portal/warehouse/staff/outbound" element={<StaffOutbound />} />
+                <Route path="/portal/warehouse/staff/cycle-count" element={<StaffCycleCount />} />
+
+                {/* Logistics & Support */}
+                <Route path="/portal/branch" element={<BranchPortal />} />
+                <Route path="/portal/branch/inbound" element={<BranchInboundPage />} />
+                <Route path="/portal/branch/outbound" element={<BranchOutboundPage />} />
+                <Route path="/portal/supervisor" element={<SupervisorPortal />} />
+                <Route path="/portal/supervisor/approval" element={<SupervisorApprovalPage />} />
+                <Route path="/portal/supervisor/fraud" element={<SupervisorFraudPage />} />
+                <Route path="/portal/hr" element={<HrPortal />} />
+                <Route path="/portal/hr/admin" element={<HrAdminOpsPage />} />
+                <Route path="/portal/marketing" element={<MarketingPortal />} />
+                <Route path="/portal/support" element={<SupportPortal />} />
+                <Route path="/portal/merchant" element={<MerchantPortal />} />
+                <Route path="/portal/customer" element={<CustomerPortal />} />
+              </Route>
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </Router>
+        </Suspense>
+      </AuthProvider>
+    </LanguageProvider>
+  );
+}

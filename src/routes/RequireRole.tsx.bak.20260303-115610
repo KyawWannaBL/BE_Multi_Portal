@@ -1,0 +1,49 @@
+import * as React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+
+function norm(v?: string | null) {
+  return (v ?? "").trim().toUpperCase();
+}
+
+export function RequireRole({
+  allow = [],
+  children,
+}: {
+  allow?: string[];
+  children: React.ReactNode;
+}) {
+  const { role, loading, isAuthenticated } = useAuth();
+  const loc = useLocation();
+
+  if (loading) return <div className="p-6 text-sm">Loading…</div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  if (!allow.length) return <>{children}</>;
+
+  const roleKey = norm(role);
+  const allowKeys = allow.map(norm);
+
+  // If user is authenticated but has no role yet, treat as provisioning issue.
+  if (!roleKey) {
+    return (
+      <Navigate
+        to="/unauthorized"
+        replace
+        state={{ reason: "ROLE_NOT_ASSIGNED", from: loc.pathname }}
+      />
+    );
+  }
+
+  const ok = allowKeys.includes(roleKey);
+  if (!ok) {
+    return (
+      <Navigate
+        to="/unauthorized"
+        replace
+        state={{ reason: "ROLE_NOT_ALLOWED", role: roleKey, from: loc.pathname }}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}

@@ -1,0 +1,5 @@
+import { analyzeImageQuality } from "@/lib/imageQuality";
+export async function extractLabelFromImage(img: string) {
+  const q = await analyzeImageQuality(img);
+  return { awb: "BE-"+Math.random().toString(36).slice(2,8).toUpperCase(), receiver: "Corporate User", phone: "091234567", address: "Downtown Yangon", codAmount: 0, quality: q };
+}

@@ -1,0 +1,17 @@
+import React from "react";
+import { NavLink } from "react-router-dom";
+import { PortalShell } from "@/components/layout/PortalShell";
+export function ExecutionShell({ title, children }: any) {
+  const base = "block px-4 py-3 rounded-2xl border border-white/10 text-xs font-bold uppercase tracking-widest transition-all";
+  return (
+    <PortalShell title={title}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <aside className="lg:col-span-3 space-y-2">
+          <NavLink to="/portal/execution" end className={({isActive}) => `${base} ${isActive ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'text-slate-400'}`}>Worklist</NavLink>
+          <NavLink to="/portal/execution/intake" className={({isActive}) => `${base} ${isActive ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'text-slate-400'}`}>Parcel Intake</NavLink>
+        </aside>
+        <main className="lg:col-span-9">{children}</main>
+      </div>
+    </PortalShell>
+  );
+}

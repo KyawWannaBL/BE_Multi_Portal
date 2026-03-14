@@ -1,0 +1,74 @@
+import { supabase } from "@/lib/supabase";
+
+function bad(res: any, message: string, status = 400) {
+  return res.status(status).json({ ok: false, error: message });
+}
+
+export default async function handler(req: any, res: any) {
+  try {
+    if (req.method === "GET") {
+      return res.status(200).json({
+        ok: true,
+        mode: "form",
+        message: "Create Delivery form endpoint",
+      });
+    }
+
+    if (req.method !== "POST") {
+      return bad(res, "Method not allowed", 405);
+    }
+
+    const body = req.body || {};
+
+    const payload = {
+      delivery_no: String(body.delivery_no || "").trim(),
+      merchant_id: body.merchant_id || null,
+      sender_name: String(body.sender_name || "").trim(),
+      recipient_name: String(body.recipient_name || "").trim(),
+      recipient_phone: String(body.recipient_phone || "").trim(),
+      pickup_township: String(body.pickup_township || "").trim() || null,
+      delivery_township: String(body.delivery_township || "").trim() || null,
+      delivery_address: String(body.delivery_address || "").trim(),
+      parcel_count: Number(body.parcel_count || 0),
+      cod_amount: Number(body.cod_amount || 0),
+      status: String(body.status || "DRAFT").trim().toUpperCase(),
+      created_by: body.created_by || null,
+    };
+
+    if (!payload.delivery_no) return bad(res, "delivery_no is required");
+    if (!payload.sender_name) return bad(res, "sender_name is required");
+    if (!payload.recipient_name) return bad(res, "recipient_name is required");
+    if (!payload.recipient_phone) return bad(res, "recipient_phone is required");
+    if (!payload.delivery_address) return bad(res, "delivery_address is required");
+    if (!Number.isFinite(payload.parcel_count) || payload.parcel_count <= 0) {
+      return bad(res, "parcel_count must be greater than 0");
+    }
+    if (!Number.isFinite(payload.cod_amount) || payload.cod_amount < 0) {
+      return bad(res, "cod_amount must be 0 or greater");
+    }
+    if (!["DRAFT", "READY"].includes(payload.status)) {
+      return bad(res, "status must be DRAFT or READY");
+    }
+
+    const { data, error } = await supabase
+      .from("deliveries")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error) {
+      return bad(res, error.message, 500);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      item: data,
+      message: "Delivery created successfully",
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "Unexpected server error",
+    });
+  }
+}

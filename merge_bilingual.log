@@ -1,0 +1,6 @@
+=== START merge_bilingual_safe ===
+EN: zip=bilingual_output.zip commit=0 force=0
+MM: zip=bilingual_output.zip commit=0 force=0
+EN: ERROR: Zip not found: bilingual_output.zip
+MM: ERROR: Zip မတွေ့ပါ: bilingual_output.zip
+logout

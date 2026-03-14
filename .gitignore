@@ -1,0 +1,17 @@
+*.apk
+*.zip
+dist/
+build/
+android/build/
+android/app/build/
+node_modules/
+.vercel/
+src/src/
+public/*.apk
+fixRider.js
+fixSainDirect.js
+forceMetadata.js
+updateRider.js
+updateSain.js
+.env
+.env.*

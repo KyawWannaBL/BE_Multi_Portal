@@ -1,0 +1,40 @@
+import React, { Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { LanguageProvider } from "./contexts/LanguageContext";
+import { RequireAuth } from "@/routes/RequireAuth";
+import { RequireRole } from "@/routes/RequireRole";
+import Login from "./pages/Login";
+import Signup from "./pages/SignUp";
+import ResetPassword from "./pages/ResetPassword";
+import DashboardRedirect from "./pages/DashboardRedirect";
+import ExecutiveCommandCenter from "@/pages/portals/admin/ExecutiveCommandCenter";
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <Suspense fallback={<div className="bg-[#05080F] min-h-screen" />}>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+
+            <Route element={<RequireAuth />}>
+              <Route path="/" element={<DashboardRedirect />} />
+              <Route
+                path="/portal/admin/executive"
+                element={
+                  <RequireRole allow={["SUPER_ADMIN", "SYS"]}>
+                    <ExecutiveCommandCenter />
+                  </RequireRole>
+                }
+              />
+            </Route>
+
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </Suspense>
+    </LanguageProvider>
+  );
+}

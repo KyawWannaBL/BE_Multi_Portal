@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  /* Grandeur Design Tokens */
+  --color-luxury-gold: #D4AF37;
+  --color-luxury-obsidian: #0B0C10;
+  --color-luxury-cream: #FAF9F6;
+  
+  --shadow-luxury: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+  --radius-luxury: 2rem;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-luxury-obsidian);
+    color: var(--color-luxury-cream);
+    @apply antialiased selection:bg-luxury-gold/30;
+  }
+}
+
+@layer components {
+  /* Fix: Use CSS color-mix for transparency to avoid Tailwind v4 build errors */
+  .luxury-glass {
+    background: color-mix(in srgb, white 3%, transparent);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid color-mix(in srgb, white 10%, transparent);
+    box-shadow: var(--shadow-luxury);
+  }
+
+  .luxury-card {
+    background: color-mix(in srgb, white 2%, transparent);
+    border: 1px solid color-mix(in srgb, white 5%, transparent);
+    border-radius: var(--radius-luxury);
+    @apply transition-all duration-700 hover:border-luxury-gold/30 hover:bg-white/[0.05];
+  }
+
+  .luxury-button {
+    background-color: var(--color-luxury-gold);
+    color: #000;
+    @apply font-bold tracking-[0.3em] uppercase text-[10px] py-4 px-10 rounded-full 
+           hover:scale-105 active:scale-95 transition-all duration-500;
+  }
+}

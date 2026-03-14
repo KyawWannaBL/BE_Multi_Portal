@@ -1,0 +1,428 @@
+import "leaflet/dist/leaflet.css";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { supabase } from "@/lib/supabase";
+import {
+  Globe,
+  Loader2,
+  Fingerprint,
+  Download,
+  UserPlus,
+  KeyRound,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { NativeBiometric } from "@capgo/capacitor-native-biometric";
+import { Preferences } from "@capacitor/preferences";
+
+type ViewState = "login" | "force_change";
+
+export default function Login() {
+  const navigate = useNavigate();
+  const langCtx = useLanguage?.() ?? {};
+  const lang = langCtx.lang ?? langCtx.language ?? "en";
+  const setLang =
+    langCtx.setLang ??
+    langCtx.setLanguage ??
+    ((next: "en" | "my") => {
+      console.warn("Language setter unavailable:", next);
+    });
+
+  const [view, setView] = useState<ViewState>("login");
+  const [loading, setLoading] = useState(false);
+  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [tempUserId, setTempUserId] = useState("");
+  const [tempRole, setTempRole] = useState("");
+
+  const t = (en: string, my: string) => (lang === "en" ? en : my);
+
+  const forceChangeExemptRoles = useMemo(
+    () => ["SUPER_ADMIN", "SYS", "APP_OWNER"],
+    []
+  );
+
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      try {
+        const { isAvailable } = await NativeBiometric.isAvailable();
+        setIsBiometricAvailable(Boolean(isAvailable));
+      } catch {
+        setIsBiometricAvailable(false);
+      }
+    };
+
+    checkBiometrics();
+  }, []);
+
+  const routeUser = (role: string) => {
+    const r = role?.toUpperCase() || "USER";
+
+    if (["SUPER_ADMIN", "SYS", "APP_OWNER"].includes(r)) navigate("/portal/admin");
+    else if (["FINANCE", "FINANCE_ADMIN", "ACCOUNTANT"].includes(r)) navigate("/portal/finance");
+    else if (["SUPERVISOR", "HUB_MANAGER", "STAFF", "OPERATIONS_ADMIN", "OPS"].includes(r)) navigate("/portal/supervisor");
+    else if (["MERCHANT"].includes(r)) navigate("/portal/merchant");
+    else if (["RIDER", "DRIVER", "HELPER"].includes(r)) navigate("/portal/execution");
+    else if (["HR", "HR_ADMIN", "HR_DIRECTOR"].includes(r)) navigate("/portal/hr");
+    else if (["BRANCH_MANAGER", "BRANCH_STAFF"].includes(r)) navigate("/portal/branch");
+    else if (["WAREHOUSE", "WAREHOUSE_MANAGER", "INVENTORY"].includes(r)) navigate("/portal/warehouse");
+    else if (["SUPPORT", "CS_AGENT"].includes(r)) navigate("/portal/support");
+    else if (["DATA_ENTRY", "CLERK"].includes(r)) navigate("/portal/data-entry");
+    else {
+      toast.error(t("Access Denied", "ဝင်ရောက်ခွင့်မရှိပါ"));
+      supabase.auth.signOut();
+    }
+  };
+
+  const saveSecureCredentials = async (e: string, p: string) => {
+    await Preferences.set({ key: "secure_email", value: e });
+    await Preferences.set({ key: "secure_password", value: p });
+  };
+
+  const shouldForcePasswordChange = (profile: any) => {
+    const role = String(profile?.role || "").toUpperCase();
+    const requiresPasswordChange = Boolean(profile?.requires_password_change);
+
+    if (forceChangeExemptRoles.includes(role)) {
+      return false;
+    }
+
+    return requiresPasswordChange;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (authData?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role, requires_password_change")
+          .eq("id", authData.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const role = String(profile?.role || "");
+        setTempUserId(authData.user.id);
+        setTempRole(role);
+
+        if (shouldForcePasswordChange(profile)) {
+          setView("force_change");
+          toast.success(
+            t(
+              "Password update required for this account.",
+              "ဤအကောင့်အတွက် စကားဝှက်ပြောင်းရန် လိုအပ်ပါသည်။"
+            )
+          );
+        } else {
+          await saveSecureCredentials(email, password);
+          routeUser(role);
+        }
+      }
+    } catch (error: any) {
+      toast.error(error?.message || t("Login Failed", "အကောင့်ဝင်ခြင်း မအောင်မြင်ပါ"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 6) {
+      toast.error(t("Password too short", "စကားဝှက် တိုလွန်းပါသည်"));
+      return;
+    }
+
+    const role = String(tempRole || "").toUpperCase();
+    if (forceChangeExemptRoles.includes(role)) {
+      toast.error(
+        t(
+          "This account is exempt from forced password change.",
+          "ဤအကောင့်သည် စကားဝှက်မဖြစ်မနေပြောင်းရန် မလိုအပ်ပါ။"
+        )
+      );
+      setView("login");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({ requires_password_change: false })
+        .eq("id", tempUserId);
+
+      if (profileUpdateError) throw profileUpdateError;
+
+      await saveSecureCredentials(email, newPassword);
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", tempUserId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      toast.success(t("Security Updated!", "လုံခြုံရေးပြင်ဆင်ပြီးပါပြီ"));
+      routeUser(profile?.role);
+    } catch (error: any) {
+      toast.error(error?.message || t("Update failed", "ပြင်ဆင်မှု မအောင်မြင်ပါ"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      await NativeBiometric.verifyIdentity({
+        reason: t(
+          "Scan fingerprint to access Britium Terminal",
+          "Britium Terminal သို့ဝင်ရန် လက်ဗွေစစ်ဆေးပါ"
+        ),
+        title: t("Biometric Login", "လက်ဗွေဖြင့် အကောင့်ဝင်မည်"),
+      });
+
+      const savedEmail = await Preferences.get({ key: "secure_email" });
+      const savedPassword = await Preferences.get({ key: "secure_password" });
+
+      if (!savedEmail.value || !savedPassword.value) {
+        toast.error(
+          t(
+            "No fingerprint data saved. Login manually first.",
+            "လက်ဗွေမှတ်တမ်း မရှိသေးပါ။ ပုံမှန်အကောင့်ဝင်ပြီးမှ အသုံးပြုပါ။"
+          )
+        );
+        return;
+      }
+
+      setLoading(true);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: savedEmail.value,
+        password: savedPassword.value,
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role, requires_password_change")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        if (shouldForcePasswordChange(profile)) {
+          setEmail(savedEmail.value);
+          setTempUserId(data.user.id);
+          setTempRole(profile?.role || "");
+          setView("force_change");
+          toast.success(
+            t(
+              "Password update required for this account.",
+              "ဤအကောင့်အတွက် စကားဝှက်ပြောင်းရန် လိုအပ်ပါသည်။"
+            )
+          );
+          return;
+        }
+
+        routeUser(profile?.role);
+      }
+    } catch (error) {
+      console.log("Biometric failed", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goToSignUp = () => navigate("/signup");
+  const goToForgotPassword = () => navigate("/forgot-password");
+
+  return (
+    <div className="relative min-h-screen w-full overflow-hidden bg-black">
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+      >
+        <source src="/background.mp4" type="video/mp4" />
+      </video>
+
+      <div className="absolute inset-0 bg-black/70" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#020617]/80 via-[#05080F]/70 to-[#0B101B]/85" />
+
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md rounded-[2.5rem] border border-white/10 bg-[#0B101B]/75 p-8 shadow-2xl backdrop-blur-xl">
+          <div className="mb-8 flex justify-center">
+            <img
+              src="/logo.png"
+              alt="Logo"
+              className="h-24 w-24 object-contain"
+            />
+          </div>
+
+          {view === "login" ? (
+            <>
+              <h2 className="mb-2 text-center text-xl font-black uppercase tracking-[0.3em] text-white">
+                {t("Security Gateway", "လုံခြုံရေးဂိတ်")}
+              </h2>
+              <p className="mb-8 text-center text-sm text-gray-300">
+                {t(
+                  "Secure access to Britium Terminal",
+                  "Britium Terminal သို့ လုံခြုံစွာ ဝင်ရောက်ပါ"
+                )}
+              </p>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <input
+                  type="email"
+                  placeholder={t("IDENTITY EMAIL", "အီးမေးလ်")}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-mono text-white outline-none placeholder:text-gray-500 focus:border-emerald-500"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+
+                <input
+                  type="password"
+                  placeholder={t("ACCESS KEY", "စကားဝှက်")}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-mono text-white outline-none placeholder:text-gray-500 focus:border-emerald-500"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex flex-1 items-center justify-center rounded-xl bg-blue-600 py-4 text-xs font-black uppercase tracking-widest text-white transition hover:bg-blue-500 disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      t("Authorize Access", "ဝင်ရောက်မည်")
+                    )}
+                  </button>
+
+                  {isBiometricAvailable && (
+                    <button
+                      type="button"
+                      onClick={handleBiometricLogin}
+                      className="flex w-14 items-center justify-center rounded-xl bg-emerald-600 text-white transition hover:bg-emerald-500"
+                      title={t("Fingerprint Login", "လက်ဗွေဖြင့် ဝင်မည်")}
+                    >
+                      <Fingerprint size={24} />
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={goToSignUp}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-bold uppercase text-gray-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <UserPlus size={14} />
+                  {t("Sign Up", "အကောင့်ဖွင့်ရန်")}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goToForgotPassword}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-[11px] font-bold uppercase text-amber-300 transition hover:bg-amber-500/20"
+                >
+                  <KeyRound size={14} />
+                  {t("Forgot Password", "စကားဝှက်မေ့နေသည်")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="mb-2 text-center text-xl font-black uppercase tracking-[0.2em] text-rose-400">
+                {t("Update Required", "စကားဝှက် ပြောင်းရန် လိုအပ်သည်")}
+              </h2>
+              <p className="mb-8 text-center text-xs text-gray-400">
+                {t(
+                  "Predefined staff accounts must update their password on first login. Super Admin and App Owner are exempt.",
+                  "ကြိုတင်သတ်မှတ်ထားသော ဝန်ထမ်းအကောင့်များသည် ပထမဆုံးဝင်သောအချိန်တွင် စကားဝှက်ပြောင်းရန် လိုအပ်ပါသည်။ Super Admin နှင့် App Owner မပါဝင်ပါ။"
+                )}
+              </p>
+
+              <form onSubmit={handleForceChange} className="space-y-4">
+                <input
+                  type="password"
+                  placeholder={t("NEW ACCESS KEY", "စကားဝှက်အသစ်")}
+                  className="w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-mono text-white outline-none placeholder:text-rose-300/60 focus:border-rose-400"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center rounded-xl bg-rose-600 py-4 text-xs font-black uppercase tracking-widest text-white transition hover:bg-rose-500 disabled:opacity-60"
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    t("Update & Enter", "ပြောင်းပြီး ဝင်မည်")
+                  )}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={() => setView("login")}
+                className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-bold uppercase text-gray-300 transition hover:bg-white/10 hover:text-white"
+              >
+                {t("Back to Login", "အကောင့်ဝင်ရန် ပြန်သွားမည်")}
+              </button>
+            </>
+          )}
+
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setLang(lang === "en" ? "my" : "en")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-bold uppercase text-gray-300 transition hover:bg-white/10 hover:text-white"
+            >
+              <Globe size={14} />
+              {lang === "en" ? "Myanmar" : "English"}
+            </button>
+
+            <a
+              href="/app-debug.apk"
+              download
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[11px] font-bold uppercase text-emerald-300 transition hover:bg-emerald-500/20"
+            >
+              <Download size={14} />
+              {t("Download APK", "APK ဒေါင်းလုပ်")}
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,21 @@
+1) Add this import to src/App.tsx:
+const BilingualPortalRouteMount = React.lazy(() => import("./features/bilingual-portal/routes/RouteMount"));
+
+2) Add this role constant inside App():
+const BILINGUAL_ROLES = Array.from(new Set([...ADMIN_ROLES, ...FINANCE_ROLES, ...OPS_ROLES, ...BRANCH_ROLES, ...MERCHANT_ROLES]));
+
+3) Add this route before the fallback route:
+<Route
+  path="/portal/bilingual/*"
+  element={
+    <SecurityGatekeeper allowedRoles={BILINGUAL_ROLES}>
+      <BilingualPortalRouteMount />
+    </SecurityGatekeeper>
+  }
+/>
+
+4) Add this import to src/components/Header.tsx:
+import LanguageToggle from '@/components/common/LanguageToggle';
+
+5) Add this inside the right-side header actions, before <NotificationBell />:
+<LanguageToggle />

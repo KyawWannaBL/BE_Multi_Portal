@@ -1,0 +1,108 @@
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { createShipmentDataEntry } from "@/services/shipments";
+
+export type IntakeUploadDefaults = {
+  receiverCity: string;
+  receiverState: string;
+  deliveryType: string;
+  deliveryFee: number;
+  itemPrice: number;
+  cbm: number;
+  remarksPrefix: string;
+};
+
+export type UploadRowInput = {
+  awb: string;
+  receiver: string;
+  phone: string;
+  address: string;
+  codAmount: number;
+  labelPhotoDataUrl?: string | null;
+};
+
+export type UploadRowResult = {
+  ok: boolean;
+  awb: string;
+  shipmentId?: string;
+  wayId?: string;
+  photoUrl?: string | null;
+  error?: string;
+};
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(",");
+  const mime = header.match(/data:(.*?);base64/)?.[1] ?? "image/jpeg";
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return new Blob([bytes], { type: mime });
+}
+
+/**
+ * Best-effort: upload label photo to Supabase storage bucket "parcel-labels".
+ * If bucket is missing or RLS denies, returns null and continues.
+ */
+async function uploadLabelPhotoBestEffort(awb: string, dataUrl: string): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
+
+  try {
+    const bucket = "parcel-labels";
+    const ext = "jpg";
+    const path = `intake/${awb}/${Date.now()}.${ext}`;
+    const blob = dataUrlToBlob(dataUrl);
+
+    const up = await supabase.storage.from(bucket).upload(path, blob, { upsert: true, contentType: blob.type });
+    if (up.error) return null;
+
+    const pub = supabase.storage.from(bucket).getPublicUrl(path);
+    return pub?.data?.publicUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function uploadParcelsFromIntake(
+  rows: UploadRowInput[],
+  defaults: IntakeUploadDefaults
+): Promise<UploadRowResult[]> {
+  const out: UploadRowResult[] = [];
+
+  for (const r of rows) {
+    try {
+      const awb = String(r.awb || "").trim();
+      if (!awb || awb === "—") throw new Error("AWB_REQUIRED");
+
+      const receiver_name = (r.receiver || "UNKNOWN").trim();
+      const receiver_phone = (r.phone || "—").trim();
+      const receiver_address = (r.address || "—").trim();
+
+      const photoUrl = r.labelPhotoDataUrl ? await uploadLabelPhotoBestEffort(awb, r.labelPhotoDataUrl) : null;
+
+      const remarks = [
+        defaults.remarksPrefix,
+        `AWB=${awb}`,
+        `PHONE=${receiver_phone}`,
+        `COD=${Number(r.codAmount || 0)}`,
+        photoUrl ? `LABEL_PHOTO=${photoUrl}` : "",
+      ].filter(Boolean).join(" | ");
+
+      const created = await createShipmentDataEntry({
+        receiver_name,
+        receiver_phone,
+        receiver_address,
+        receiver_city: defaults.receiverCity,
+        receiver_state: defaults.receiverState,
+        item_price: defaults.itemPrice,
+        delivery_fee: defaults.deliveryFee,
+        cod_amount: Number(r.codAmount || 0),
+        cbm: defaults.cbm,
+        delivery_type: defaults.deliveryType,
+        remarks,
+      } as any);
+
+      out.push({ ok: true, awb, shipmentId: created.shipmentId, wayId: created.wayId, photoUrl });
+    } catch (e: any) {
+      out.push({ ok: false, awb: String(r.awb || "—"), error: String(e?.message || e) });
+    }
+  }
+
+  return out;
+}

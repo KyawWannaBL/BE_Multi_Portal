@@ -1,0 +1,78 @@
+--- a/src/supabaseClient.ts
++++ b/src/supabaseClient.ts
+@@ -1,11 +1,38 @@
+-import { createClient } from '@supabase/supabase-js';
++import { createClient } from "@supabase/supabase-js";
+ 
+-const supabaseUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || '') as string;
+-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '') as string;
++/**
++ * Supabase client (guarded).
++ *
++ * Why: Supabase SDK throws at import-time if URL/key are missing. That blocks React from mounting and
++ * causes a black/blank screen. This file guarantees the app can render ConfigFault instead.
++ */
++const supabaseUrl = String(
++  import.meta.env.VITE_SUPABASE_PROJECT_URL || import.meta.env.VITE_SUPABASE_URL || ""
++).trim();
+ 
+-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
++const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+ 
++export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
+ 
+-if (!supabaseUrl || !supabaseAnonKey) {
+-  console.warn('[supabase] Missing VITE_SUPABASE_PROJECT_URL/VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
++function createMissingConfigProxy(): any {
++  const message =
++    "[supabase] Missing env. Set VITE_SUPABASE_PROJECT_URL (or VITE_SUPABASE_URL) and VITE_SUPABASE_ANON_KEY, then rebuild.";
++  return new Proxy(
++    {},
++    {
++      get() {
++        throw new Error(message);
++      },
++    }
++  );
+ }
++
++export const supabase = hasSupabaseConfig
++  ? createClient(supabaseUrl, supabaseAnonKey)
++  : createMissingConfigProxy();
++
++if (!hasSupabaseConfig) {
++  console.warn(
++    "[supabase] Missing VITE_SUPABASE_PROJECT_URL/VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY (app will show ConfigFault)."
++  );
++}
+diff --git a/src/supabaseClient.js b/src/supabaseClient.js
+deleted file mode 100644
+--- a/src/supabaseClient.js
++++ /dev/null
+@@ -1,10 +0,0 @@
+-import { createClient } from '@supabase/supabase-js'
+-
+-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+-
+-if (!supabaseUrl || !supabaseAnonKey) {
+-  console.error("🚨 CONFIG ERROR: Supabase keys are missing from the environment!");
+-}
+-
+-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+diff --git a/supabaseClient.js b/supabaseClient.js
+deleted file mode 100644
+--- a/supabaseClient.js
++++ /dev/null
+@@ -1,11 +0,0 @@
+-import { createClient } from '@supabase/supabase-js'
+-
+-// Vite requires import.meta.env, NOT process.env
+-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+-
+-if (!supabaseUrl || !supabaseAnonKey) {
+-  console.error("🚨 VITE ERROR: Keys are missing from the environment!");
+-}
+-
+-export const supabase = createClient(supabaseUrl, supabaseAnonKey)

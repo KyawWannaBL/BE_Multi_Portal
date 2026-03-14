@@ -1,0 +1,173 @@
+type JsonParams = Record<string, any>;
+
+function buildQuery(params: JsonParams = {}) {
+  const sp = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    sp.set(key, String(value));
+  });
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function reportPayload(params: JsonParams = {}, items: any[] = [], summary: Record<string, any> = {}) {
+  const page = Number(params.page || 1);
+  const pageSize = Number(params.pageSize || 20);
+  return {
+    items,
+    total: items.length,
+    page,
+    pageSize,
+    summary,
+  };
+}
+
+function fallbackWayManagement(endpoint: string, params: JsonParams = {}) {
+  const fallbacks: Record<string, () => any> = {
+    "/api/admin/way-management/pickup-ways": () =>
+      reportPayload(params, [], {
+        totalWays: 0,
+        assignedWays: 0,
+        pendingWays: 0,
+      }),
+
+    "/api/admin/way-management/deliver-ways": () =>
+      reportPayload(params, [], {
+        totalWays: 0,
+        outForDelivery: 0,
+        completedWays: 0,
+      }),
+
+    "/api/admin/way-management/failed-ways": () =>
+      reportPayload(params, [], {
+        failedWays: 0,
+        retryPending: 0,
+        returnedWays: 0,
+      }),
+
+    "/api/admin/way-management/return-ways": () =>
+      reportPayload(params, [], {
+        returnWays: 0,
+        processedReturns: 0,
+        pendingReturns: 0,
+      }),
+
+    "/api/admin/way-management/parcel-in-out": () =>
+      reportPayload(params, [], {
+        inCount: 0,
+        outCount: 0,
+        stationCount: 0,
+      }),
+
+    "/api/admin/way-management/transit-route": () =>
+      reportPayload(params, [], {
+        activeRoutes: 0,
+        connectedStations: 0,
+        vehiclesUsed: 0,
+      }),
+
+    "/api/admin/way-management/tracking-map": () =>
+      reportPayload(params, [], {
+        trackedUnits: 0,
+        onlineUnits: 0,
+        alerts: 0,
+      }),
+
+    "/api/admin/filter-options/branches": () => [],
+    "/api/admin/filter-options/merchants": () => [],
+    "/api/admin/filter-options/deliverymen": () => [],
+  };
+
+  return fallbacks[endpoint] ? fallbacks[endpoint]() : null;
+}
+
+async function parseJsonOrFallback(response: Response, endpoint: string, params: JsonParams = {}) {
+  const contentType = response.headers.get("content-type") || "";
+  const raw = await response.text();
+
+  if (contentType.includes("application/json")) {
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  const trimmed = String(raw || "").trim();
+  const looksLikeHtml =
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html") ||
+    trimmed.startsWith("<");
+
+  if (looksLikeHtml) {
+    const fallback = fallbackWayManagement(endpoint, params);
+    if (fallback !== null) return fallback;
+    throw new Error(`Endpoint returned HTML instead of JSON: ${endpoint}`);
+  }
+
+  return raw ? JSON.parse(raw) : {};
+}
+
+export async function getJson(path: string, params: JsonParams = {}) {
+  const url = `${path}${buildQuery(params)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const fallback = fallbackWayManagement(path, params);
+      if (fallback !== null) return fallback;
+      throw new Error(`GET ${path} failed with status ${response.status}`);
+    }
+
+    return await parseJsonOrFallback(response, path, params);
+  } catch (err) {
+    const fallback = fallbackWayManagement(path, params);
+    if (fallback !== null) return fallback;
+    throw err;
+  }
+}
+
+export async function postJson(path: string, body: JsonParams = {}) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const raw = await response.text();
+  const data = raw ? JSON.parse(raw) : {};
+
+  if (!response.ok) {
+    throw new Error(data?.error || `POST ${path} failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
+export async function patchJson(path: string, body: JsonParams = {}) {
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const raw = await response.text();
+  const data = raw ? JSON.parse(raw) : {};
+
+  if (!response.ok) {
+    throw new Error(data?.error || `PATCH ${path} failed with status ${response.status}`);
+  }
+
+  return data;
+}

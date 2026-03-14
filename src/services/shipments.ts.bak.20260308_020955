@@ -1,0 +1,94 @@
+// @ts-nocheck
+/**
+ * shipments service (EN/MM)
+ * EN: Build-safe service surface. Replace stub logic with RPC/Triggers later.
+ * MY: Build မပျက်အောင် export surface အပြည့်အစုံ။ နောက်မှ RPC/Triggers နဲ့အစားထိုးပါ။
+ */
+import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { safeErrorMessage } from "@/services/supabaseHelpers";
+
+export type Shipment = {
+  id?: string;
+  way_id?: string;
+  status?: string;
+  assigned_rider_id?: string | null;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_address?: string;
+  receiver_city?: string;
+  cod_amount?: number;
+  delivery_fee?: number;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: any;
+};
+
+function notConfigured<T>(fallback: T): T {
+  return fallback;
+}
+
+/** EN: list assigned shipments for current rider. MY: rider အတွက် assigned shipments list */
+export async function listAssignedShipments(userId?: string): Promise<Shipment[]> {
+  try {
+    if (!SUPABASE_CONFIGURED) return notConfigured([]);
+    if (!userId) {
+      const { data } = await supabase.auth.getUser();
+      userId = data?.user?.id || undefined;
+    }
+    if (!userId) return [];
+    const res = await supabase
+      .from("shipments")
+      .select("*")
+      .eq("assigned_rider_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (res.error) return [];
+    return (res.data as any[]) || [];
+  } catch {
+    return [];
+  }
+}
+
+/** EN: add tracking note. MY: tracking note ထည့် */
+export async function addTrackingNote(wayId: string, note: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!SUPABASE_CONFIGURED) return { ok: true };
+    const { data } = await supabase.auth.getUser();
+    const actor = data?.user?.id ?? null;
+    const res = await supabase.from("shipment_tracking").insert({
+      way_id: wayId,
+      status: "NOTE",
+      notes: note,
+      actor_id: actor,
+      created_at: new Date().toISOString(),
+    });
+    if (res.error) return { ok: false, error: safeErrorMessage(res.error) };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: safeErrorMessage(e) };
+  }
+}
+
+/** EN: mark picked up. MY: PICKED_UP သို့ ပြောင်း */
+export async function markPickedUp(wayId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!SUPABASE_CONFIGURED) return { ok: true };
+    await supabase.from("shipments").update({ status: "PICKED_UP", updated_at: new Date().toISOString() }).eq("way_id", wayId);
+    await addTrackingNote(wayId, "PICKED_UP");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: safeErrorMessage(e) };
+  }
+}
+
+/** EN: mark delivered. MY: DELIVERED သို့ ပြောင်း */
+export async function markDelivered(wayId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!SUPABASE_CONFIGURED) return { ok: true };
+    await supabase.from("shipments").update({ status: "DELIVERED", updated_at: new Date().toISOString() }).eq("way_id", wayId);
+    await addTrackingNote(wayId, "DELIVERED");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: safeErrorMessage(e) };
+  }
+}

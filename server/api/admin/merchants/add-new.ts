@@ -1,0 +1,58 @@
+import { supabase } from "@/lib/supabase";
+
+function bad(res: any, message: string, status = 400) {
+  return res.status(status).json({ ok: false, error: message });
+}
+
+export default async function handler(req: any, res: any) {
+  try {
+    if (req.method === "GET") {
+      return res.status(200).json({
+        ok: true,
+        mode: "form",
+        message: "Add New Merchant form endpoint",
+      });
+    }
+
+    if (req.method !== "POST") {
+      return bad(res, "Method not allowed", 405);
+    }
+
+    const body = req.body || {};
+
+    const payload = {
+      merchant_code: String(body.merchant_code || "").trim() || null,
+      merchant_name: String(body.merchant_name || "").trim(),
+      contact_person: String(body.contact_person || "").trim() || null,
+      phone: String(body.phone || "").trim() || null,
+      email: String(body.email || "").trim() || null,
+      business_type: String(body.business_type || "").trim() || null,
+      address: String(body.address || "").trim() || null,
+      status: String(body.status || "ACTIVE").trim().toUpperCase(),
+    };
+
+    if (!payload.merchant_name) return bad(res, "merchant_name is required");
+    if (!["ACTIVE", "INACTIVE"].includes(payload.status)) {
+      return bad(res, "status must be ACTIVE or INACTIVE");
+    }
+
+    const { data, error } = await supabase
+      .from("merchants")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error) return bad(res, error.message, 500);
+
+    return res.status(200).json({
+      ok: true,
+      item: data,
+      message: "Merchant created successfully",
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "Unexpected server error",
+    });
+  }
+}

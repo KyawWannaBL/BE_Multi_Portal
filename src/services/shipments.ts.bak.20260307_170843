@@ -1,0 +1,6 @@
+// @ts-nocheck
+export const listAssignedShipments = async () => [];
+export const addTrackingNote = async () => ({ success: true });
+export const markPickedUp = async () => ({ success: true });
+export const markDelivered = async () => ({ success: true });
+export const markDeliveryFailed = async () => ({ success: true });

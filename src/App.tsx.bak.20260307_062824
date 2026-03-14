@@ -1,0 +1,63 @@
+import React, { Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+
+import { LanguageProvider } from "./contexts/LanguageContext";
+import { RequireAuth } from "@/routes/RequireAuth";
+import { RequireRole } from "@/routes/RequireRole";
+
+import Login from "./pages/Login";
+import Unauthorized from "./pages/Unauthorized";
+import DashboardRedirect from "./pages/DashboardRedirect";
+import ManualPage from "./pages/ManualPage";
+import PortalHome from "./pages/portal/PortalHome";
+
+import ExecutionPortal from "@/pages/portals/ExecutionPortal";
+import ExecutionNavigationPage from "@/pages/portals/ExecutionNavigationPage";
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <Suspense fallback={<div className="bg-[#05080F] min-h-screen" />}>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+
+            <Route element={<RequireAuth />}>
+              <Route path="/" element={<DashboardRedirect />} />
+              <Route path="/portal" element={<PortalHome />} />
+
+              {/* Rider / Driver / Helper (Execution portal) */}
+              <Route
+                path="/portal/execution"
+                element={
+                  <RequireRole allow={["RIDER", "DRIVER", "HELPER", "SUPER_ADMIN", "SYS", "APP_OWNER"]}>
+                    <ExecutionPortal />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/portal/execution/navigation"
+                element={
+                  <RequireRole allow={["RIDER", "DRIVER", "HELPER", "SUPER_ADMIN", "SYS", "APP_OWNER"]}>
+                    <ExecutionNavigationPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/portal/execution/manual"
+                element={
+                  <RequireRole allow={["RIDER", "DRIVER", "HELPER", "OPERATIONS_ADMIN", "STAFF", "DATA_ENTRY", "SUPER_ADMIN", "SYS", "APP_OWNER"]}>
+                    <ManualPage />
+                  </RequireRole>
+                }
+              />
+            </Route>
+
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </Suspense>
+    </LanguageProvider>
+  );
+}

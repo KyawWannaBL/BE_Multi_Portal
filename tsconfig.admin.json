@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    
+    "baseUrl": ".",
+    "paths": { 
+      "@/*": ["src/*"] 
+    },
+
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/components/**/*",
+    "src/contexts/**/*",
+    "src/lib/**/*",
+    "src/integrations/**/*",
+    "src/services/**/*",
+    "src/hooks/**/*",
+    "src/types/**/*",
+    "src/assets/**/*",
+    "src/routes/**/*",
+    "src/pages/Login.tsx",
+    "src/pages/SuperAdminDashboard.tsx",
+    "src/pages/admin/**/*",
+    "src/supabaseClient.ts"
+  ]
+}

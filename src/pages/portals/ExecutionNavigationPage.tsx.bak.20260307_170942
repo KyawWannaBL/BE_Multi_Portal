@@ -1,0 +1,29 @@
+// @ts-nocheck
+import React from "react";
+import { PortalShell } from "@/components/layout/PortalShell";
+import { useLanguage } from "@/contexts/LanguageContext";
+import EmptyState from "@/components/common/EmptyState";
+
+export default function ExecutionNavigationPage() {
+  const langCtx:any = useLanguage() as any;
+  const lang = langCtx?.lang ?? "en";
+  const t = langCtx?.t ?? ((en:string, mm:string)=> (lang==="my"||lang==="mm")?mm:en);
+
+  const hasMapbox = Boolean(import.meta.env.VITE_MAPBOX_TOKEN);
+
+  return (
+    <PortalShell title={t("Execution Navigation","Execution Navigation (လမ်းကြောင်း)")}>
+      {hasMapbox ? (
+        <EmptyState
+          title={t("Map integration ready","Map integration ready")}
+          hint={t("Mapbox token detected. Integrate navigation/route UI next.","Mapbox token တွေ့ပါပြီ။ နောက်တစ်ဆင့် navigation/route UI ထည့်ပါ။")}
+        />
+      ) : (
+        <EmptyState
+          title={t("Mapbox token missing","Mapbox token မရှိပါ")}
+          hint={t("Set VITE_MAPBOX_TOKEN in environment for navigation maps.","Environment မှာ VITE_MAPBOX_TOKEN ထည့်ပါ။")}
+        />
+      )}
+    </PortalShell>
+  );
+}

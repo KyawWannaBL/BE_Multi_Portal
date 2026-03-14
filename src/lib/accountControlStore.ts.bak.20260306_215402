@@ -1,0 +1,107 @@
+export type Role =
+  | "SYS"
+  | "APP_OWNER"
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "ADM"
+  | "MGR"
+  | "STAFF"
+  | "FINANCE_USER"
+  | "FINANCE_STAFF"
+  | "HR_ADMIN"
+  | "MARKETING_ADMIN"
+  | "CUSTOMER_SERVICE"
+  | "WAREHOUSE_MANAGER"
+  | "SUBSTATION_MANAGER"
+  | "SUPERVISOR"
+  | "RIDER"
+  | "DRIVER"
+  | "HELPER"
+  | "MERCHANT"
+  | "CUSTOMER"
+  | "GUEST";
+
+export type AccountStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED" | "ARCHIVED";
+
+export type Permission =
+  | "ADMIN_PORTAL_READ"
+  | "EXEC_COMMAND_READ"
+  | "ADMIN_DASH_READ"
+  | "ADMIN_USER_READ"
+  | "USER_READ"
+  | "USER_CREATE"
+  | "USER_APPROVE"
+  | "USER_REJECT"
+  | "USER_ROLE_EDIT"
+  | "USER_BLOCK"
+  | "USER_RESET_TOKEN"
+  | "USER_DOCS_READ"
+  | "AUTHORITY_MANAGE"
+  | "AUDIT_READ"
+  | "BULK_ACTIONS"
+  | "CSV_IMPORT"
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================================================================
+# ✅ Add BOTH:
+# 1) Auto-grant GOVERNANCE perms by Role on approval (toggle)
+#    - ADMIN/ADM/MGR => USER_* governance perms (+ optional AUTHORITY_MANAGE)
+# 2) "My Requests" view + pluggable Email/Webhook notification hooks (NO SQL)
+#
+# Files:
+# - src/lib/accountControlStore.ts          (adds governance defaults + helpers)
+# - src/lib/notify.ts                      (webhook notifier; optional)
+# - src/pages/AccountControl.tsx           (UI: toggle governance defaults on approve + My Requests + notify hooks)
+#
+# Optional env (Vite):
+# - VITE_NOTIFY_WEBHOOK_URL="https://your-webhook-endpoint"
+#   Receives JSON POST { event, at, actorEmail, payload }
+# ==============================================================================
+
+backup() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  cp -f "$f" "${f}.bak.$(date +%Y%m%d_%H%M%S)"
+}
+
+STORE_LIB="src/lib/accountControlStore.ts"
+NOTIFY_LIB="src/lib/notify.ts"
+ACCOUNT_CONTROL="src/pages/AccountControl.tsx"
+
+mkdir -p "$(dirname "$STORE_LIB")" "$(dirname "$NOTIFY_LIB")" "$(dirname "$ACCOUNT_CONTROL")"
+backup "$STORE_LIB"
+backup "$NOTIFY_LIB"
+backup "$ACCOUNT_CONTROL"
+
+# ------------------------------------------------------------------------------
+# 1) notify.ts (pluggable webhook; no-op if env missing)
+# ------------------------------------------------------------------------------
+cat > "$NOTIFY_LIB" <<'EOF'
+export type NotifyEvent =
+  | "ACCOUNT_REQUEST_CREATED"
+  | "ACCOUNT_REQUEST_APPROVED"
+  | "ACCOUNT_REQUEST_REJECTED"
+  | "AUTHORITY_REQUEST_CREATED"
+  | "AUTHORITY_REQUEST_APPROVED"
+  | "AUTHORITY_REQUEST_REJECTED";
+
+export async function notify(event: NotifyEvent, payload: Record<string, unknown>, actorEmail?: string) {
+  const url = (import.meta as any)?.env?.VITE_NOTIFY_WEBHOOK_URL as string | undefined;
+  if (!url) return;
+
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        event,
+        at: new Date().toISOString(),
+        actorEmail: actorEmail ?? null,
+        payload,
+      }),
+    });
+  } catch {
+    // silent by design (production safe)
+  }
+}

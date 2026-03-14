@@ -1,0 +1,68 @@
+{
+  "common": {
+    "language": "Language",
+    "english": "English",
+    "myanmar": "Myanmar",
+    "continue": "Continue",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "required": "This field is required."
+  },
+  "gateway": {
+    "title": "Enterprise Delivery Gateway",
+    "subtitle": "Public tracking is open. Operational workflows are protected by RBAC and audit enforcement.",
+    "trackTitle": "Track Shipment (Public)",
+    "trackPlaceholder": "Enter Tracking ID / AWB",
+    "trackBtn": "Track",
+    "enterPortal": "Enter Operations Portal",
+    "merchantAccess": "Merchant Portal",
+    "login": "Secure Login"
+  },
+  "auth": {
+    "signupCustomer": "Customer Sign Up",
+    "signupMerchant": "Merchant Sign Up",
+    "email": "Email",
+    "phone": "Phone",
+    "name": "Full Name",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "createAccount": "Create Account",
+    "passwordMismatch": "Passwords do not match.",
+    "weakPassword": "Password must be at least 8 characters, include upper/lowercase, number and special character.",
+    "notAuthenticated": "Not authenticated."
+  },
+  "kyc": {
+    "title": "Customer Identity Verification (NRC)",
+    "note": "National ID is mandatory for customers in Myanmar.",
+    "nrcNumber": "National ID (NRC) Number",
+    "nrcFront": "NRC Front Photo",
+    "nrcBack": "NRC Back Photo (optional)",
+    "submit": "Submit KYC",
+    "submitted": "KYC submitted successfully. Verification pending."
+  },
+  "password": {
+    "forceTitle": "Password Change Required",
+    "forceDesc": "For security, you must change your default password before accessing operational pages.",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "update": "Update Password",
+    "updated": "Password updated successfully."
+  },
+  "policy": {
+    "intlTitle": "International Delivery Standards",
+    "accept": "I agree to the International Delivery Standards & Customs Compliance Policy.",
+    "statement": "I confirm that this shipment complies with Myanmar export/import regulations and international delivery standards.",
+    "required": "You must accept the international delivery policy before submitting."
+  },
+  "pickup": {
+    "title": "Pickup Request",
+    "shipmentInfo": "Shipment Information",
+    "pieces": "Pieces",
+    "type": "Type",
+    "condition": "Condition",
+    "codAmount": "COD Amount (optional)",
+    "submit": "Submit Pickup Request",
+    "success": "Pickup request submitted."
+  }
+}

@@ -1,0 +1,19 @@
+email,user_id,current_role,target_role,privileged,bulk_reset_candidate,must_change_password,current_status,notes
+md@britiumexpress.com,561bd74b-1adf-4239-985a-255cc9573ccb,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Keep separate from bulk reset
+sai@britiumexpress.com,df034bd2-41a9-4efb-b3f3-6229665e2297,SYS,SUPER_ADMIN,Yes,No,Yes,Review individually,Role review needed
+sainyanhtun82@gmail.com,094c4bb4-2858-4fbe-bd0b-c6befde46811,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Skip from bulk
+admin@britiumexpress.com,7392871a-a75b-4024-b1ed-306cde363f59,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Skip from bulk
+cashier_1@britiumexpress.com,06c8b527-d529-4502-83b0-eba6f45debac,FINANCE_USER,FINANCE_USER,No,Yes,Yes,Ready,Bulk reset candidate
+finance_senior_demo@britiumexpress.com,0853e29c-6f29-4e78-a792-e8da9c3f7f5e,FINANCE_SENIOR,FINANCE_SENIOR,No,Yes,Yes,Ready,Bulk reset candidate
+info_mdy@britiumexpress.com,0ed14f86-eb59-49de-89a1-930058a4f2cf,STAFF,STAFF,No,Yes,Yes,Ready,Bulk reset candidate
+rider_mdy00011@britiumexpress.com,62866a60-e3c6-4e5d-abf9-1623d731aaf2,RIDER,RIDER,No,Yes,Yes,Ready,Bulk reset candidate
+admin_npw@britiumexpress.com,80a51287-6cc8-4529-8a78-fd47f1f2cebd,HUB_MANAGER,HUB_MANAGER,No,Yes,Yes,Ready,Bulk reset candidate
+rider_npw00001@britiumexpress.com,874c0e23-3de1-4d8b-801d-6942126ded20,RIDER,RIDER,No,Yes,Yes,Ready,Bulk reset candidate
+dataentry_demo@britiumexpress.com,99b9dace-d916-4b0e-a089-b7b2cc9d6717,DATA_ENTRY,DATA_ENTRY,No,Yes,Yes,Ready,Bulk reset candidate
+rider_demo@britiumexpress.com,9cecc5c6-6f98-40a0-a2b8-ccc8278331f0,RIDER,RIDER,No,Yes,No,Review,Only row with must_change_password currently false
+opt_mgr_demo@britiumexpress.com,ba598707-5659-4cee-84bd-321ba2879fc9,OPT_MGR,OPT_MGR,No,Yes,Yes,Ready,Bulk reset candidate
+customer_demo@britiumexpress.com,bf303b49-13f3-4662-ad98-cdb37648d8f7,CUSTOMER,CUSTOMER,No,Yes,Yes,Ready,Bulk reset candidate
+merchant@britiumexpress.com,da66672a-6be2-4bea-bd96-fc715d45a3ac,MERCHANT,MERCHANT,No,Yes,Yes,Ready,Bulk reset candidate
+supervisor_demo@britiumexpress.com,ecd1a264-8203-4348-adbb-34f91d051601,SUPERVISOR,SUPERVISOR,No,Yes,Yes,Ready,Bulk reset candidate
+mgkyawwanna@gmail.com,,UNKNOWN,APP_OWNER,Yes,No,Yes,Missing from pasted profiles,Look up separately
+md@britiumventures.com,,UNKNOWN,APP_OWNER,Yes,No,Yes,Missing from pasted profiles,Look up separately

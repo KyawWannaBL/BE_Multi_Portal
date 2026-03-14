@@ -1,0 +1,4 @@
+import React from "react";
+export default function ExecutionRoutePlannerMap() {
+  return <div className="h-[400px] bg-slate-900 rounded-3xl border border-white/10 flex items-center justify-center text-xs text-white/40 italic">Mapbox View Placeholder</div>;
+}

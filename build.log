@@ -1,0 +1,16 @@
+
+> britium-l5-dashboard@1.1.0 build
+> vite build
+
+[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 39 modules transformed.
+[31m✗[39m Build failed in 6.95s
+[31merror during build:
+[31mCould not resolve "./execution/RiderDashboard" from "src/pages/portals/ExecutionPortal.tsx"[31m
+file: [36mC:/Users/Public/BE_Multi_Portal/src/pages/portals/ExecutionPortal.tsx[31m
+    at getRollupError (file:///C:/Users/Public/BE_Multi_Portal/node_modules/rollup/dist/es/shared/parseAst.js:402:41)
+    at error (file:///C:/Users/Public/BE_Multi_Portal/node_modules/rollup/dist/es/shared/parseAst.js:398:42)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/Users/Public/BE_Multi_Portal/node_modules/rollup/dist/es/shared/node-entry.js:21710:24)
+    at ModuleLoader.resolveDynamicImport (file:///C:/Users/Public/BE_Multi_Portal/node_modules/rollup/dist/es/shared/node-entry.js:21770:58)
+    at async file:///C:/Users/Public/BE_Multi_Portal/node_modules/rollup/dist/es/shared/node-entry.js:21654:32[39m

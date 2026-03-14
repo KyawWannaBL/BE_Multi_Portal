@@ -1,0 +1,95 @@
+import { supabase } from "@/lib/supabase";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) || "";
+
+function buildUrl(path, query) {
+  const url = new URL(API_BASE ? `${API_BASE}${path}` : path, window.location.origin);
+
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+
+  return url.toString();
+}
+
+function toInt(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeSortOrder(value) {
+  return String(value || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+}
+
+async function rpcWaysCountReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+    p_merchant_id: query?.merchant || null,
+  };
+
+  const { data, error } = await supabase.rpc("api_report_ways_count", params);
+
+  if (error) {
+    throw new Error(error.message || "Failed to load ways count report.");
+  }
+
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || params.p_page),
+    pageSize: Number(data?.pageSize || params.p_page_size),
+    summary: data?.summary || {},
+  };
+}
+
+export async function getJson(path, query) {
+  if (path === "/api/admin/reporting/ways-count-report") {
+    return rpcWaysCountReport(query);
+  }
+
+  const url = buildUrl(path, query);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return { items: [], total: 0, page: 1, pageSize: 20, summary: {} };
+  }
+
+  const data = await response.json();
+
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      page: Number(query?.page || 1),
+      pageSize: Number(query?.pageSize || 20),
+      summary: {},
+    };
+  }
+
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || query?.page || 1),
+    pageSize: Number(data?.pageSize || query?.pageSize || 20),
+    summary: data?.summary || {},
+  };
+}

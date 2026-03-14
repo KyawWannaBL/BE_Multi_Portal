@@ -1,0 +1,17 @@
+Add these lines manually to src/App.tsx
+
+1) Add import near other lazy imports:
+const BilingualPortalRouteMount = React.lazy(() => import("./features/bilingual-portal/routes/RouteMount"));
+
+2) Add role constant inside App():
+const BILINGUAL_ROLES = Array.from(new Set([...ADMIN_ROLES, ...FINANCE_ROLES, ...OPS_ROLES, ...BRANCH_ROLES, ...MERCHANT_ROLES]));
+
+3) Add route before the fallback "*" route:
+<Route
+  path="/portal/bilingual/*"
+  element={
+    <SecurityGatekeeper allowedRoles={BILINGUAL_ROLES}>
+      <BilingualPortalRouteMount />
+    </SecurityGatekeeper>
+  }
+/>

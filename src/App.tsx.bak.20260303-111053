@@ -1,0 +1,82 @@
+import React, { Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { LanguageProvider } from "./contexts/LanguageContext";
+
+import AdminLayout from "./components/AdminLayout";
+
+import Login from "./pages/Login";
+import SignUp from "./pages/SignUp";
+import ForgotPassword from "./pages/ForgotPassword";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import AccountControl from "./pages/AccountControl";
+import HRPortal from "./pages/HRPortal";
+
+import AuthCallback from "./pages/AuthCallback";
+import SecurityUpdate from "./pages/SecurityUpdate";
+import Unauthorized from "./pages/Unauthorized";
+
+import { RequireAuth } from "@/routes/RequireAuth";
+import { RequirePasswordRotation } from "@/routes/RequirePasswordRotation";
+import { RequireRole } from "@/routes/RequireRole";
+
+const Loading = () => (
+  <div className="min-h-screen bg-[#05080F] flex items-center justify-center text-[10px] text-emerald-500 font-mono tracking-widest uppercase animate-pulse">
+    INITIALIZING L5 SECURE GATEWAY...
+  </div>
+);
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <Suspense fallback={<Loading />}>
+        <Router>
+          <Routes>
+            {/* Public */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<SignUp />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+
+            {/* SSO callback */}
+            <Route path="/auth/callback" element={<AuthCallback />} />
+
+            {/* Policy enforcement */}
+            <Route path="/security-update" element={<SecurityUpdate />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+
+            {/* Protected */}
+            <Route element={<RequireAuth />}>
+              <Route element={<RequirePasswordRotation />}>
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireRole
+                      allow={[
+                        "SUPER_ADMIN",
+                        "OPERATIONS_ADMIN",
+                        "FINANCE_ADMIN",
+                        "MARKETING_ADMIN",
+                        "CUSTOMER_SERVICE_ADMIN",
+                        "MGR",
+                      ]}
+                    >
+                      <AdminLayout />
+                    </RequireRole>
+                  }
+                >
+                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route path="dashboard" element={<SuperAdminDashboard />} />
+                  <Route path="accounts" element={<AccountControl />} />
+                  <Route path="hr" element={<HRPortal />} />
+                </Route>
+              </Route>
+            </Route>
+
+            {/* Defaults */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </Suspense>
+    </LanguageProvider>
+  );
+}

@@ -1,0 +1,7 @@
+email,user_id,current_role,target_role,privileged,bulk_reset_candidate,must_change_password,current_status,notes
+md@britiumexpress.com,561bd74b-1adf-4239-985a-255cc9573ccb,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Keep separate from bulk reset
+sai@britiumexpress.com,df034bd2-41a9-4efb-b3f3-6229665e2297,SYS,SUPER_ADMIN,Yes,No,Yes,Review individually,Role review needed
+sainyanhtun82@gmail.com,094c4bb4-2858-4fbe-bd0b-c6befde46811,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Skip from bulk
+admin@britiumexpress.com,7392871a-a75b-4024-b1ed-306cde363f59,SUPER_ADMIN,SUPER_ADMIN,Yes,No,Yes,Review individually,Skip from bulk
+mgkyawwanna@gmail.com,,UNKNOWN,APP_OWNER,Yes,No,Yes,Missing from pasted profiles,Look up separately
+md@britiumventures.com,,UNKNOWN,APP_OWNER,Yes,No,Yes,Missing from pasted profiles,Look up separately

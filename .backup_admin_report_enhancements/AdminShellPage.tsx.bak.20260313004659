@@ -1,0 +1,167 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { Search, RefreshCw } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getJson } from "@/features/admin-shell/api/http";
+
+function FilterInput({ placeholder, value, onChange }) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500"
+    />
+  );
+}
+
+export default function AdminShellPage({ config }) {
+  const { language, bi } = useLanguage();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searchValues, setSearchValues] = useState({});
+
+  const title = language === "en" ? config.titleEn : config.titleMy;
+  const description = language === "en" ? config.descriptionEn : config.descriptionMy;
+
+  const activeColumns = config.columns || [];
+
+  const fetchRows = async () => {
+    if (!config.endpoint) return;
+    try {
+      setLoading(true);
+      setError("");
+      const result = await getJson(config.endpoint);
+      if (Array.isArray(result)) {
+        setRows(result);
+      } else if (result && Array.isArray(result.items)) {
+        setRows(result.items);
+      } else {
+        setRows([]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRows();
+  }, [config.endpoint]);
+
+  const filteredRows = useMemo(() => {
+    if (!rows.length) return rows;
+    const terms = Object.values(searchValues).filter(Boolean).map((v) => String(v).toLowerCase());
+    if (!terms.length) return rows;
+
+    return rows.filter((row) => {
+      const haystack = Object.values(row || {}).join(" ").toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [rows, searchValues]);
+
+  return (
+    <div className="p-6 md:p-8 animate-in fade-in">
+      <div className="mb-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl font-black uppercase tracking-widest text-white">{title}</h2>
+            <p className="mt-2 text-sm text-gray-400">{description}</p>
+            <p className="mt-2 text-[10px] font-mono uppercase text-emerald-400">
+              {bi("Endpoint", "Endpoint")} : {config.endpoint || "-"}
+            </p>
+          </div>
+
+          <button
+            onClick={fetchRows}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase text-white hover:bg-white/10"
+          >
+            <RefreshCw size={14} />
+            {bi("Refresh", "ပြန်လည်ရယူရန်")}
+          </button>
+        </div>
+      </div>
+
+      {config.filters && config.filters.length ? (
+        <div className="mb-6 rounded-2xl border border-white/5 bg-[#0A0E17] p-4">
+          <div className="mb-3 flex items-center gap-2 text-xs font-black uppercase text-gray-400">
+            <Search size={14} />
+            {bi("Filters", "စစ်ထုတ်မှုများ")}
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {config.filters.map((filterKey) => (
+              <FilterInput
+                key={filterKey}
+                placeholder={`${bi("Search", "ရှာရန်")} ${filterKey}`}
+                value={searchValues[filterKey] || ""}
+                onChange={(value) =>
+                  setSearchValues((prev) => ({ ...prev, [filterKey]: value }))
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-white/5 bg-[#0A0E17] overflow-hidden shadow-2xl">
+        <div className="border-b border-white/5 px-6 py-4">
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+            {bi("Screen Data", "မျက်နှာပြင်ဒေတာ")}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm text-gray-400">
+            {bi("Loading...", "ဖွင့်နေသည်...")}
+          </div>
+        ) : error ? (
+          <div className="p-10 text-sm text-rose-400">
+            {bi("Could not load data from the configured endpoint.", "သတ်မှတ်ထားသော endpoint မှ ဒေတာကို မရယူနိုင်ပါ။")}
+            <div className="mt-2 font-mono text-xs text-rose-300">{error}</div>
+          </div>
+        ) : !activeColumns.length ? (
+          <div className="p-10 text-sm text-gray-300">
+            {bi(
+              "This shell is ready for a real form/editor component. Connect the endpoint and replace this area with the final screen implementation.",
+              "ဤ shell သည် တကယ့် form/editor component အတွက် အဆင်သင့်ဖြစ်နေပါသည်။ Endpoint ကိုချိတ်ဆက်ပြီး နောက်ဆုံးမျက်နှာပြင် implementation ဖြင့် အစားထိုးပါ။"
+            )}
+          </div>
+        ) : !filteredRows.length ? (
+          <div className="p-10 text-sm text-gray-300">
+            {bi(
+              "No records found. This screen is production-ready and waiting for live backend data.",
+              "ဒေတာမတွေ့ပါ။ ဤမျက်နှာပြင်သည် production-ready ဖြစ်ပြီး live backend data ကို စောင့်ဆိုင်းနေပါသည်။"
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-black/30 text-gray-500 uppercase font-bold text-[9px]">
+                <tr>
+                  {activeColumns.map((column) => (
+                    <th key={column.key} className="p-4 whitespace-nowrap">
+                      {language === "en" ? column.labelEn : column.labelMy}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-gray-300">
+                {filteredRows.map((row, rowIndex) => (
+                  <tr key={String(row.id || rowIndex)} className="hover:bg-white/5 transition-colors">
+                    {activeColumns.map((column) => (
+                      <td key={column.key} className="p-4 whitespace-nowrap">
+                        {String(row[column.key] ?? "")}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

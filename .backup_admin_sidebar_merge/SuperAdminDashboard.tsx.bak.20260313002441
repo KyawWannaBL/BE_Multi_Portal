@@ -1,0 +1,240 @@
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
+import LiveRiderMap from '@/components/maps/LiveRiderMap';
+import toast from 'react-hot-toast';
+import { 
+  LayoutDashboard, Users, Store, Receipt, Settings, LogOut, ExternalLink, 
+  ChevronLeft, ChevronRight, Globe, User, Search, Plus, ShieldAlert, 
+  Loader2, X, Activity, Database, Truck, Key, HardDrive, RefreshCw
+} from 'lucide-react';
+
+// ==========================================
+// 1. TOP NAVIGATION BAR
+// ==========================================
+const TopBar = () => {
+  const navigate = useNavigate();
+  const langCtx = useLanguage?.() ?? {};
+  const currentLang = langCtx.lang || 'en';
+  const t = (en: string, my: string) => currentLang === 'en' ? en : my;
+
+  return (
+    <div className="h-16 border-b border-white/5 bg-[#0B101B]/80 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-50">
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate(-1)} className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg transition-all"><ChevronLeft size={18}/></button>
+        <button onClick={() => navigate(1)} className="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg transition-all"><ChevronRight size={18}/></button>
+      </div>
+      <div className="flex items-center gap-4">
+        <button onClick={() => langCtx.setLanguage(currentLang === 'en' ? 'my' : 'en')} className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase hover:text-white px-3 py-1.5 rounded-lg bg-white/5 transition-all">
+          <Globe size={14} /> {currentLang === 'en' ? 'MY' : 'EN'}
+        </button>
+        <div className="h-8 border-l border-white/10 mx-2"></div>
+        <div className="flex items-center gap-3 p-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/5">
+          <div className="text-right hidden md:block">
+            <div className="text-xs font-bold text-white uppercase tracking-tighter">{t("System Admin", "စနစ် အက်ဒမင်")}</div>
+            <div className="text-[9px] text-emerald-400 font-mono">SA-001</div>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center border border-white/10">
+            <User size={18} className="text-white" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 2. LIVE USER MATRICES
+// ==========================================
+const UserManagement = ({ t }: { t: Function }) => {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState('RIDER');
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    if (!error) setUsers(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email, password: "Britium2026",
+        options: { data: { full_name: fullName, role: role } }
+      });
+      if (authError) throw authError;
+      toast.success(t("Identity Created! Default: Britium2026", "အကောင့်ဖန်တီးပြီးပါပြီ။"));
+      setIsModalOpen(false);
+      setEmail(''); setFullName(''); fetchUsers();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-6 md:p-8 animate-in fade-in relative">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-black uppercase tracking-widest text-white">{t("User Matrices", "အသုံးပြုသူများ")}</h2>
+        <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2">
+          <Plus size={16} /> {t("CREATE IDENTITY", "အကောင့်သစ်")}
+        </button>
+      </div>
+      <div className="bg-[#0A0E17] border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-black/40 text-gray-500 uppercase font-bold text-[9px]">
+            <tr><th className="p-4">{t("Staff Member", "ဝန်ထမ်း")}</th><th className="p-4">{t("Role", "ရာထူး")}</th><th className="p-4">{t("Status", "အခြေအနေ")}</th></tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 text-gray-300">
+            {loading ? <tr><td colSpan={3} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500" /></td></tr> :
+              users.map((u) => (
+                <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                  <td className="p-4 font-bold text-white">{u.full_name || u.email}</td>
+                  <td className="p-4 text-blue-400 font-mono">{u.role}</td>
+                  <td className="p-4 uppercase text-emerald-400">{u.status}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#0B101B] border border-white/10 rounded-[2rem] w-full max-w-md p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-white font-black uppercase text-sm">{t("Issue New Identity", "အကောင့်သစ်ဖန်တီးခြင်း")}</h3>
+              <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-gray-500" /></button>
+            </div>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500" placeholder={t("Full Name", "အမည်")} />
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500" placeholder={t("Email", "အီးမေးလ်")} />
+              <select value={role} onChange={e => setRole(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500">
+                <option value="SUPER_ADMIN">SUPER ADMIN</option>
+                <option value="RIDER">RIDER</option>
+                <option value="MERCHANT">MERCHANT</option>
+                <option value="FINANCE_ADMIN">FINANCE ADMIN</option>
+              </select>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[10px] text-amber-500 font-bold uppercase text-center">Default Password: Britium2026</div>
+              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 py-4 rounded-xl text-white font-black text-xs uppercase tracking-widest">{t("Authorize", "အတည်ပြုမည်")}</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ==========================================
+// 3. MAIN DASHBOARD CONTENT
+// ==========================================
+const CommandCenter = ({ t }: { t: Function }) => (
+  <div className="p-6 md:p-8 animate-in fade-in duration-500">
+    <div className="mb-8">
+      <h2 className="text-2xl font-black uppercase tracking-widest text-white mb-1">{t("Command Center", "ထိန်းချုပ်ရေးစင်တာ")}</h2>
+      <p className="text-emerald-400 text-[10px] tracking-[0.2em] uppercase flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> {t("System Online", "စနစ်အလုပ်လုပ်နေသည်")}
+      </p>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {[
+        { title: t("Nodes", "နေရာများ"), val: "12", icon: <Activity className="text-blue-500"/> },
+        { title: t("Users", "အသုံးပြုသူ"), val: "142", icon: <Users className="text-purple-500"/> },
+        { title: t("Cargo", "ကုန်ပစ္စည်း"), val: "842", icon: <Truck className="text-emerald-500"/> },
+        { title: t("DB", "ဒေတာ"), val: "99.9%", icon: <Database className="text-amber-500"/> }
+      ].map((stat, i) => (
+        <div key={i} className="bg-[#0A0E17] border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all">
+          <div className="mb-4">{stat.icon}</div>
+          <div className="text-3xl font-black text-white">{stat.val}</div>
+          <div className="text-[10px] text-gray-500 font-bold uppercase mt-2">{stat.title}</div>
+        </div>
+      ))}
+    </div>
+    <div className="h-[450px] w-full rounded-2xl overflow-hidden bg-black border border-white/5 shadow-2xl relative z-0">
+      <LiveRiderMap />
+    </div>
+  </div>
+);
+
+// ==========================================
+// 4. MASTER LAYOUT
+// ==========================================
+export default function SuperAdminDashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const langCtx = useLanguage?.() ?? {};
+  const t = (en: string, my: string) => (langCtx.lang || 'en') === 'en' ? en : my;
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
+
+  const portalGroups = [
+    { group: t("Core Executive", "အုပ်ချုပ်မှု အဓိက"), links: [
+      { n: t("Finance", "ငွေကြေးဌာန"), p: "/portal/finance" },
+      { n: t("HR", "လူ့စွမ်းအား"), p: "/portal/hr" }
+    ]},
+    { group: t("Operational", "လုပ်ငန်းလည်ပတ်ရေး"), links: [
+      { n: t("Operations", "လုပ်ငန်းများ"), p: "/portal/operations" },
+      { n: t("Warehouse", "ဂိုဒေါင်"), p: "/portal/warehouse" },
+      { n: t("Branch", "ရုံးခွဲ"), p: "/portal/branch" }
+    ]},
+    { group: t("Customer & B2B", "ပြင်ပချိတ်ဆက်မှု"), links: [
+      { n: t("Merchant", "ရောင်းချသူ"), p: "/portal/merchant" },
+      { n: t("Support", "အကူအညီပေးရေး"), p: "/portal/support" }
+    ]}
+  ];
+
+  return (
+    <div className="flex h-screen bg-[#05080F] text-slate-200 font-sans overflow-hidden">
+      <div className="w-72 bg-[#0A0E17] border-r border-white/5 flex flex-col justify-between z-50">
+        <div className="overflow-y-auto custom-scrollbar">
+          <div className="p-8 border-b border-white/5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20"><Activity size={20} className="text-white"/></div>
+            <span className="font-black text-white uppercase text-sm leading-tight tracking-widest">Britium<br/><span className="text-emerald-500 text-[10px]">Terminal</span></span>
+          </div>
+          <nav className="px-6 py-8">
+            <Link to="/portal/admin" className={`flex items-center gap-4 px-4 py-3.5 rounded-xl text-xs font-black uppercase mb-8 ${location.pathname === '/portal/admin' ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20" : "text-gray-500"}`}><LayoutDashboard size={18}/> Dashboard</Link>
+            <Link to="/portal/admin/users" className={`flex items-center gap-4 px-4 py-3.5 rounded-xl text-xs font-black uppercase mb-8 ${location.pathname === '/portal/admin/users' ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20" : "text-gray-500"}`}><Users size={18}/> User Matrix</Link>
+            {portalGroups.map((g, i) => (
+              <div key={i} className="mb-6">
+                <div className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-2 ml-2">{g.group}</div>
+                {g.links.map((l) => (
+                  <Link key={l.p} to={l.p} className="flex items-center justify-between px-4 py-2 text-[10px] font-bold text-gray-500 hover:text-white uppercase group transition-all">
+                    {l.n} <ExternalLink size={12} className="opacity-0 group-hover:opacity-100" />
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </nav>
+        </div>
+        <div className="p-6">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl text-[10px] font-black uppercase text-rose-500 bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/20 transition-all"><ShieldAlert size={14}/> {t("Log Out", "ထွက်မည်")}</button>
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        <TopBar />
+        <div className="flex-1 overflow-y-auto bg-gradient-to-tr from-black to-[#05080F]">
+          <Routes>
+            <Route path="/" element={<CommandCenter t={t} />} />
+            <Route path="users" element={<UserManagement t={t} />} />
+            <Route path="merchants" element={<div className="p-8 text-white"><h2 className="text-2xl font-black uppercase">Merchant Admin</h2></div>} />
+            <Route path="settings" element={<div className="p-8 text-white"><h2 className="text-2xl font-black uppercase">Platform Settings</h2></div>} />
+          </Routes>
+        </div>
+      </div>
+    </div>
+  );
+}

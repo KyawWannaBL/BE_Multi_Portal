@@ -1,0 +1,787 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  CalendarRange,
+  Download,
+  Eye,
+  FileSpreadsheet,
+  Pencil,
+  Printer,
+  RefreshCw,
+  Archive,
+  X,
+  CheckSquare,
+  Square,
+  RotateCcw
+} from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getJson, patchJson } from "@/features/admin-shell/api/http";
+import { exportToCsv, exportToExcel, printReport } from "@/features/admin-shell/utils/reportExport";
+import AdminEntityFormPage from "./AdminEntityFormPage";
+import toast from "react-hot-toast";
+
+const DATE_PRESET_OPTIONS = {
+  today: { en: "Today", my: "ယနေ့" },
+  yesterday: { en: "Yesterday", my: "မနေ့" },
+  thisWeek: { en: "This Week", my: "ယခုအပတ်" },
+  thisMonth: { en: "This Month", my: "ယခုလ" },
+  last30Days: { en: "Last 30 Days", my: "ပြီးခဲ့သော ၃၀ ရက်" },
+};
+
+function formatPresetToDates(preset) {
+  const now = new Date();
+  function toISO(date) {
+    const yy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  }
+  if (preset === "today") return { dateFrom: toISO(now), dateTo: toISO(now) };
+  if (preset === "yesterday") {
+    const dt = new Date(now);
+    dt.setDate(now.getDate() - 1);
+    return { dateFrom: toISO(dt), dateTo: toISO(dt) };
+  }
+  if (preset === "thisWeek") {
+    const start = new Date(now);
+    const day = start.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - diff);
+    return { dateFrom: toISO(start), dateTo: toISO(now) };
+  }
+  if (preset === "thisMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { dateFrom: toISO(start), dateTo: toISO(now) };
+  }
+  if (preset === "last30Days") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 29);
+    return { dateFrom: toISO(start), dateTo: toISO(now) };
+  }
+  return { dateFrom: "", dateTo: "" };
+}
+
+function KpiCard({ title, value }) {
+  return (
+    <div className="rounded-2xl border border-white/5 bg-[#0A0E17] p-5">
+      <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">{title}</div>
+      <div className="mt-3 text-2xl font-black text-white">{value}</div>
+    </div>
+  );
+}
+
+function TinyBarChart({ rows, labelKey, valueKey }) {
+  const chartRows = (rows || []).slice(0, 8);
+  const max = Math.max(1, ...chartRows.map((r) => Number(r[valueKey] || 0)));
+  if (!chartRows.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-[#0A0E17] p-5">
+      <div className="mb-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Chart Preview</div>
+      <div className="space-y-3">
+        {chartRows.map((row, idx) => {
+          const val = Number(row[valueKey] || 0);
+          const width = `${Math.max(4, (val / max) * 100)}%`;
+          return (
+            <div key={idx}>
+              <div className="mb-1 flex items-center justify-between text-[10px] text-gray-400">
+                <span className="truncate pr-4">{String(row[labelKey] || "-")}</span>
+                <span>{val}</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/5">
+                <div className="h-2 rounded-full bg-emerald-500" style={{ width }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FilterControl({ filterKey, value, onChange, language }) {
+  const baseClass =
+    "w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500";
+
+  if (filterKey === "datePreset") {
+    return (
+      <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={baseClass}>
+        <option value="">{language === "en" ? "Date Preset" : "ရက်အုပ်စု"}</option>
+        {Object.entries(DATE_PRESET_OPTIONS).map(([key, label]) => (
+          <option key={key} value={key}>{language === "en" ? label.en : label.my}</option>
+        ))}
+      </select>
+    );
+  }
+
+  if (filterKey === "dateFrom" || filterKey === "dateTo") {
+    return <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)} className={baseClass} />;
+  }
+
+  if (filterKey === "status") {
+    return (
+      <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={baseClass}>
+        <option value="">{language === "en" ? "Any Status" : "မည်သည့်အခြေအနေမဆို"}</option>
+        <option value="ACTIVE">{language === "en" ? "Active" : "အသက်ဝင်"}</option>
+        <option value="INACTIVE">{language === "en" ? "Inactive" : "မအသက်ဝင်"}</option>
+        <option value="PENDING">{language === "en" ? "Pending" : "စောင့်ဆိုင်းနေ"}</option>
+        <option value="DRAFT">{language === "en" ? "Draft" : "မူကြမ်း"}</option>
+        <option value="READY">{language === "en" ? "Ready" : "အဆင်သင့်"}</option>
+        <option value="POSTED">{language === "en" ? "Posted" : "တင်သွင်းပြီး"}</option>
+        <option value="VOID">VOID</option>
+        <option value="ARCHIVED">{language === "en" ? "Archived" : "သိမ်းဆည်းထားသော"}</option>
+      </select>
+    );
+  }
+
+  return (
+    <input
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={`${language === "en" ? "Search" : "ရှာရန်"} ${filterKey}`}
+      className={baseClass}
+    />
+  );
+}
+
+function sumColumn(rows, key) {
+  return rows.reduce((sum, row) => {
+    const n = Number(row[key]);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+function EditModal({ open, onClose, config, row, onSaved }) {
+  if (!open || !row) return null;
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-3xl border border-white/10 bg-[#05080F] shadow-2xl">
+        <AdminEntityFormPage
+          config={config}
+          initialData={row}
+          mode="edit"
+          onSuccess={(result) => {
+            onSaved?.(result);
+            onClose?.();
+          }}
+          onCancel={onClose}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DetailDrawer({ open, onClose, config, row, language }) {
+  if (!open || !row) return null;
+
+  const fields = (config.detailFields && config.detailFields.length ? config.detailFields : config.columns || []).map((f) => ({
+    key: f.key,
+    label: language === "en" ? f.labelEn : f.labelMy,
+  }));
+
+  return (
+    <div className="fixed inset-0 z-[115] flex justify-end bg-black/50 backdrop-blur-sm">
+      <div className="h-full w-full max-w-2xl overflow-auto border-l border-white/10 bg-[#05080F] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#05080F]/95 px-6 py-4 backdrop-blur">
+          <div>
+            <h3 className="text-lg font-black uppercase tracking-widest text-white">
+              {language === "en" ? config.titleEn : config.titleMy}
+            </h3>
+            <p className="mt-1 text-xs text-gray-400">
+              {language === "en" ? "Read-only detail view" : "ဖတ်ရန်သာ အသေးစိတ်ပြသမှု"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 p-3 text-white hover:bg-white/10"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-6 p-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {fields.map((field) => (
+              <div key={field.key} className="rounded-2xl border border-white/5 bg-[#0A0E17] p-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                  {field.label}
+                </div>
+                <div className="mt-2 break-words text-sm text-white">
+                  {String(row[field.key] ?? "-")}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-white/5 bg-[#0A0E17] p-4">
+            <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
+              {language === "en" ? "Raw Payload" : "Raw Payload"}
+            </div>
+            <pre className="overflow-auto rounded-xl bg-black/30 p-4 text-xs text-emerald-300">
+{JSON.stringify(row, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminShellPage({ config }) {
+  const { language, bi } = useLanguage();
+
+  if (config.formShell && config.formFields?.length) {
+    return <AdminEntityFormPage config={config} />;
+  }
+
+  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(Number(config.pageSize || 20));
+  const [sortBy, setSortBy] = useState(config.columns && config.columns[0] ? config.columns[0].key : "");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [filters, setFilters] = useState({});
+  const [editingRow, setEditingRow] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const title = language === "en" ? config.titleEn : config.titleMy;
+  const description = language === "en" ? config.descriptionEn : config.descriptionMy;
+  const columns = config.columns || [];
+
+  const query = useMemo(() => {
+    const next = { page, pageSize, sortBy, sortOrder, ...filters };
+    if (filters.datePreset) {
+      const dates = formatPresetToDates(filters.datePreset);
+      next.dateFrom = filters.dateFrom || dates.dateFrom;
+      next.dateTo = filters.dateTo || dates.dateTo;
+    }
+    return next;
+  }, [page, pageSize, sortBy, sortOrder, filters]);
+
+  const fetchRows = async () => {
+    if (!config.endpoint) return;
+    try {
+      setLoading(true);
+      setError("");
+      const result = await getJson(config.endpoint, query);
+      setRows(Array.isArray(result.items) ? result.items : []);
+      setTotal(Number(result.total || 0));
+      setSummary(result.summary || {});
+      setSelectedIds([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+      setRows([]);
+      setTotal(0);
+      setSummary({});
+      setSelectedIds([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRows();
+  }, [config.endpoint, JSON.stringify(query)]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const exportRows = rows.map((row) => {
+    const mapped = {};
+    columns.forEach((c) => {
+      mapped[c.key] = row[c.key] ?? "";
+    });
+    return mapped;
+  });
+
+  const exportColumns = columns.map((c) => ({
+    key: c.key,
+    header: language === "en" ? c.labelEn : c.labelMy,
+  }));
+
+  const selectedRows = rows.filter((row) => selectedIds.includes(String(row.id)));
+  const allPageIds = rows.map((row) => String(row.id)).filter(Boolean);
+  const allSelectedOnPage = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.includes(id));
+
+  const handleSort = (key) => {
+    if (!config.sortable) return;
+    if (sortBy === key) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+    setPage(1);
+  };
+
+  const totalsMap = useMemo(() => {
+    const map = {};
+    (config.totals || []).forEach((key) => {
+      map[key] = sumColumn(rows, key);
+    });
+    return map;
+  }, [rows, JSON.stringify(config.totals || [])]);
+
+  const canEdit = Boolean(config.updateEndpoint && config.formFields?.length);
+  const canArchive = Boolean(config.archiveEndpoint);
+  const canRestore = Boolean(config.restoreEndpoint);
+  const canView = Boolean((config.columns || []).length);
+
+  const isRestorableRow = (row) => {
+    const status = String(row?.status || "").toUpperCase();
+    return status === "INACTIVE" || status === "VOID" || status === "ARCHIVED";
+  };
+
+  const toggleRow = (rowId) => {
+    const id = String(rowId);
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleAllOnPage = () => {
+    if (allSelectedOnPage) {
+      setSelectedIds((prev) => prev.filter((id) => !allPageIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...allPageIds])));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds([]);
+
+  const quickStatusUpdate = async (row, nextStatus) => {
+    try {
+      await patchJson(config.updateEndpoint, { ...row, status: nextStatus });
+      toast.success(bi("Status updated.", "အခြေအနေ ပြင်ဆင်ပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Status update failed.", "အခြေအနေ ပြင်ဆင်မှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const archiveRow = async (row) => {
+    const ok = window.confirm(bi("Archive this record?", "ဤမှတ်တမ်းကို သိမ်းဆည်းမလား?"));
+    if (!ok) return;
+    try {
+      await patchJson(config.archiveEndpoint, row);
+      toast.success(bi("Record archived.", "မှတ်တမ်းကို သိမ်းဆည်းပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Archive failed.", "သိမ်းဆည်းမှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const restoreRow = async (row) => {
+    const ok = window.confirm(bi("Restore this record?", "ဤမှတ်တမ်းကို ပြန်လည်အသက်သွင်းမလား?"));
+    if (!ok) return;
+    try {
+      await patchJson(config.restoreEndpoint, row);
+      toast.success(bi("Record restored.", "မှတ်တမ်းကို ပြန်လည်အသက်သွင်းပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Restore failed.", "ပြန်လည်အသက်သွင်းမှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const bulkStatusUpdate = async (nextStatus) => {
+    if (!selectedRows.length) return;
+    try {
+      await Promise.all(selectedRows.map((row) => patchJson(config.updateEndpoint, { ...row, status: nextStatus })));
+      toast.success(bi("Selected rows updated.", "ရွေးချယ်ထားသော rows များကို ပြင်ဆင်ပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Bulk update failed.", "စုစုပေါင်း ပြင်ဆင်မှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const bulkArchive = async () => {
+    if (!selectedRows.length) return;
+    const ok = window.confirm(bi("Archive selected records?", "ရွေးချယ်ထားသော မှတ်တမ်းများကို သိမ်းဆည်းမလား?"));
+    if (!ok) return;
+
+    try {
+      await Promise.all(selectedRows.map((row) => patchJson(config.archiveEndpoint, row)));
+      toast.success(bi("Selected rows archived.", "ရွေးချယ်ထားသော rows များကို သိမ်းဆည်းပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Bulk archive failed.", "စုစုပေါင်း သိမ်းဆည်းမှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const bulkRestore = async () => {
+    if (!selectedRows.length || !canRestore) return;
+    const restorable = selectedRows.filter(isRestorableRow);
+    if (!restorable.length) {
+      toast.error(bi("No selected archived rows to restore.", "ပြန်လည်အသက်သွင်းရန် archived rows မရှိပါ။"));
+      return;
+    }
+
+    const ok = window.confirm(bi("Restore selected archived records?", "ရွေးချယ်ထားသော archived records များကို ပြန်လည်အသက်သွင်းမလား?"));
+    if (!ok) return;
+
+    try {
+      await Promise.all(restorable.map((row) => patchJson(config.restoreEndpoint, row)));
+      toast.success(bi("Selected rows restored.", "ရွေးချယ်ထားသော rows များကို ပြန်လည်အသက်သွင်းပြီးပါပြီ။"));
+      fetchRows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : bi("Bulk restore failed.", "စုစုပေါင်း ပြန်လည်အသက်သွင်းမှု မအောင်မြင်ပါ။"));
+    }
+  };
+
+  const exportSelectedCsv = () => {
+    if (!selectedRows.length) return;
+    const dataset = selectedRows.map((row) => {
+      const mapped = {};
+      columns.forEach((c) => {
+        mapped[c.key] = row[c.key] ?? "";
+      });
+      return mapped;
+    });
+    exportToCsv(`${title.replace(/\s+/g, "-").toLowerCase()}-selected.csv`, exportColumns, dataset);
+  };
+
+  const exportSelectedExcel = () => {
+    if (!selectedRows.length) return;
+    const dataset = selectedRows.map((row) => {
+      const mapped = {};
+      columns.forEach((c) => {
+        mapped[c.key] = row[c.key] ?? "";
+      });
+      return mapped;
+    });
+    exportToExcel(`${title.replace(/\s+/g, "-").toLowerCase()}-selected.xls`, exportColumns, dataset);
+  };
+
+  return (
+    <div className="p-6 md:p-8 animate-in fade-in">
+      <EditModal
+        open={Boolean(editingRow)}
+        onClose={() => setEditingRow(null)}
+        config={config}
+        row={editingRow}
+        onSaved={() => fetchRows()}
+      />
+
+      <DetailDrawer
+        open={Boolean(detailRow)}
+        onClose={() => setDetailRow(null)}
+        config={config}
+        row={detailRow}
+        language={language}
+      />
+
+      <div className="mb-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-black uppercase tracking-widest text-white">{title}</h2>
+            <p className="mt-2 text-sm text-gray-400">{description}</p>
+            <p className="mt-2 text-[10px] font-mono uppercase text-emerald-400">
+              {bi("Endpoint", "Endpoint")} : {config.endpoint || "-"}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={fetchRows} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase text-white hover:bg-white/10">
+              <RefreshCw size={14} />
+              {bi("Refresh", "ပြန်လည်ရယူရန်")}
+            </button>
+
+            {config.exportable ? (
+              <>
+                <button onClick={() => exportToCsv(`${title.replace(/\s+/g, "-").toLowerCase()}.csv`, exportColumns, exportRows)} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase text-white hover:bg-white/10">
+                  <Download size={14} /> CSV
+                </button>
+                <button onClick={() => exportToExcel(`${title.replace(/\s+/g, "-").toLowerCase()}.xls`, exportColumns, exportRows)} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase text-white hover:bg-white/10">
+                  <FileSpreadsheet size={14} /> Excel
+                </button>
+              </>
+            ) : null}
+
+            {config.printable ? (
+              <button onClick={() => printReport(title)} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase text-white hover:bg-white/10">
+                <Printer size={14} />
+                {bi("Print / PDF", "ပရင့် / PDF")}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {config.summaryCards?.length ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {config.summaryCards.map((card) => (
+            <KpiCard key={card.key} title={language === "en" ? card.titleEn : card.titleMy} value={summary[card.key] ?? "-"} />
+          ))}
+        </div>
+      ) : null}
+
+      {columns.length && rows.length ? (
+        <div className="mb-6">
+          <TinyBarChart rows={rows} labelKey={columns[0].key} valueKey={(config.totals && config.totals[0]) || columns[Math.min(1, columns.length - 1)].key} />
+        </div>
+      ) : null}
+
+      {config.filters?.length ? (
+        <div className="mb-6 rounded-2xl border border-white/5 bg-[#0A0E17] p-4">
+          <div className="mb-3 flex items-center gap-2 text-xs font-black uppercase text-gray-400">
+            <CalendarRange size={14} />
+            {bi("Advanced Filters", "အဆင့်မြင့် စစ်ထုတ်မှုများ")}
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {config.filters.map((filterKey) => (
+              <FilterControl
+                key={filterKey}
+                filterKey={filterKey}
+                value={filters[filterKey] || ""}
+                onChange={(value) => {
+                  setFilters((prev) => ({ ...prev, [filterKey]: value }));
+                  setPage(1);
+                }}
+                language={language}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {selectedRows.length ? (
+        <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="text-sm font-bold text-emerald-300">
+              {selectedRows.length} {bi("rows selected", "rows ရွေးချယ်ထားသည်")}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={clearSelection} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10">
+                {bi("Clear", "ရှင်းရန်")}
+              </button>
+
+              {(config.quickStatusOptions || []).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => bulkStatusUpdate(status)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10"
+                >
+                  {bi("Set", "သတ်မှတ်")} {status}
+                </button>
+              ))}
+
+              {canArchive ? (
+                <button
+                  type="button"
+                  onClick={bulkArchive}
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-[10px] font-black uppercase text-rose-300 hover:bg-rose-500/20"
+                >
+                  <Archive size={12} />
+                  {bi("Archive Selected", "ရွေးထားသည်များ သိမ်းဆည်းရန်")}
+                </button>
+              ) : null}
+
+              {canRestore ? (
+                <button
+                  type="button"
+                  onClick={bulkRestore}
+                  className="inline-flex items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-[10px] font-black uppercase text-sky-300 hover:bg-sky-500/20"
+                >
+                  <RotateCcw size={12} />
+                  {bi("Restore Selected", "ရွေးထားသည်များ ပြန်လည်အသက်သွင်းရန်")}
+                </button>
+              ) : null}
+
+              <button type="button" onClick={exportSelectedCsv} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10">
+                CSV
+              </button>
+
+              <button type="button" onClick={exportSelectedExcel} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10">
+                Excel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-white/5 bg-[#0A0E17] overflow-hidden shadow-2xl">
+        <div className="border-b border-white/5 px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+            {bi("Report Data", "အစီရင်ခံစာ ဒေတာ")}
+          </div>
+          <div className="flex items-center gap-4">
+            {rows.length ? (
+              <button
+                type="button"
+                onClick={toggleAllOnPage}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10"
+              >
+                {allSelectedOnPage ? <CheckSquare size={14} /> : <Square size={14} />}
+                {allSelectedOnPage ? bi("Unselect Page", "ဤစာမျက်နှာ ရွေးချယ်မှုဖြုတ်ရန်") : bi("Select Page", "ဤစာမျက်နှာ ရွေးချယ်ရန်")}
+              </button>
+            ) : null}
+
+            {config.pagination ? (
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span>{bi("Rows per page", "စာမျက်နှာလျှင် အရေအတွက်")}</span>
+                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-white">
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm text-gray-400">{bi("Loading...", "ဖွင့်နေသည်...")}</div>
+        ) : error ? (
+          <div className="p-10 text-sm text-rose-400">
+            {bi("Could not load data from the configured endpoint.", "သတ်မှတ်ထားသော endpoint မှ ဒေတာကို မရယူနိုင်ပါ။")}
+            <div className="mt-2 font-mono text-xs text-rose-300">{error}</div>
+          </div>
+        ) : !columns.length ? (
+          <div className="p-10 text-sm text-gray-300">
+            {bi(
+              "This shell is ready for a real form/editor component.",
+              "ဤ shell သည် တကယ့် form/editor component အတွက် အဆင်သင့်ဖြစ်နေပါသည်။"
+            )}
+          </div>
+        ) : !rows.length ? (
+          <div className="p-10 text-sm text-gray-300">
+            {bi("No records found. This screen is waiting for live backend data.", "ဒေတာမတွေ့ပါ။ ဤမျက်နှာပြင်သည် live backend data ကို စောင့်ဆိုင်းနေပါသည်။")}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-black/30 text-gray-500 uppercase font-bold text-[9px]">
+                <tr>
+                  <th className="p-4 whitespace-nowrap">
+                    <button type="button" onClick={toggleAllOnPage} className="text-white" aria-label="Select page" title="Select page">
+                      {allSelectedOnPage ? <CheckSquare size={14} /> : <Square size={14} />}
+                    </button>
+                  </th>
+                  {columns.map((column) => {
+                    const active = sortBy === column.key;
+                    return (
+                      <th key={column.key} className={`p-4 whitespace-nowrap ${config.sortable ? "cursor-pointer select-none" : ""}`} onClick={() => handleSort(column.key)}>
+                        <div className="inline-flex items-center gap-2">
+                          <span>{language === "en" ? column.labelEn : column.labelMy}</span>
+                          {config.sortable ? <span className={active ? "text-emerald-400" : "text-gray-600"}>{active ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}</span> : null}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  {(canView || canEdit || canArchive || canRestore || config.quickStatusOptions?.length) ? (
+                    <th className="p-4 whitespace-nowrap">{bi("Actions", "လုပ်ဆောင်ချက်များ")}</th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-gray-300">
+                {rows.map((row, rowIndex) => {
+                  const rowId = String(row.id || rowIndex);
+                  const checked = selectedIds.includes(rowId);
+                  const restorable = isRestorableRow(row);
+                  return (
+                    <tr key={rowId} className="hover:bg-white/5 transition-colors">
+                      <td className="p-4 whitespace-nowrap">
+                        <button type="button" onClick={() => toggleRow(rowId)} className="text-white" aria-label="Select row" title="Select row">
+                          {checked ? <CheckSquare size={14} /> : <Square size={14} />}
+                        </button>
+                      </td>
+                      {columns.map((column) => (
+                        <td key={column.key} className="p-4 whitespace-nowrap">{String(row[column.key] ?? "")}</td>
+                      ))}
+                      {(canView || canEdit || canArchive || canRestore || config.quickStatusOptions?.length) ? (
+                        <td className="p-4 whitespace-nowrap">
+                          <div className="flex flex-wrap gap-2">
+                            {canView ? (
+                              <button
+                                type="button"
+                                onClick={() => setDetailRow(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10"
+                              >
+                                <Eye size={12} />
+                                {bi("View", "ကြည့်ရန်")}
+                              </button>
+                            ) : null}
+
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                onClick={() => setEditingRow(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10"
+                              >
+                                <Pencil size={12} />
+                                {bi("Edit", "ပြင်ဆင်ရန်")}
+                              </button>
+                            ) : null}
+
+                            {(config.quickStatusOptions || []).map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                onClick={() => quickStatusUpdate(row, status)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-white/10"
+                              >
+                                {status}
+                              </button>
+                            ))}
+
+                            {canArchive ? (
+                              <button
+                                type="button"
+                                onClick={() => archiveRow(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase text-rose-300 hover:bg-rose-500/20"
+                              >
+                                <Archive size={12} />
+                                {bi("Archive", "သိမ်းဆည်းရန်")}
+                              </button>
+                            ) : null}
+
+                            {canRestore && restorable ? (
+                              <button
+                                type="button"
+                                onClick={() => restoreRow(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-[10px] font-black uppercase text-sky-300 hover:bg-sky-500/20"
+                              >
+                                <RotateCcw size={12} />
+                                {bi("Restore", "ပြန်လည်အသက်သွင်းရန်")}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {config.showTotals && config.totals?.length ? (
+                <tfoot className="bg-white/5 text-gray-200">
+                  <tr>
+                    <td className="p-4" />
+                    {columns.map((column, idx) => (
+                      <td key={column.key} className="p-4 whitespace-nowrap font-bold">
+                        {idx === 0 ? bi("Totals", "စုစုပေါင်း") : config.totals.includes(column.key) ? String(totalsMap[column.key] ?? "") : ""}
+                      </td>
+                    ))}
+                    {(canView || canEdit || canArchive || canRestore || config.quickStatusOptions?.length) ? <td className="p-4" /> : null}
+                  </tr>
+                </tfoot>
+              ) : null}
+            </table>
+          </div>
+        )}
+
+        {config.pagination ? (
+          <div className="border-t border-white/5 px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-xs text-gray-400">{bi("Total records", "စုစုပေါင်း မှတ်တမ်း")} : {total}</div>
+            <div className="flex items-center gap-2">
+              <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{bi("Prev", "ယခင်")}</button>
+              <div className="text-xs text-gray-300 px-2">{bi("Page", "စာမျက်နှာ")} {page} / {totalPages}</div>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{bi("Next", "နောက်တစ်ခု")}</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

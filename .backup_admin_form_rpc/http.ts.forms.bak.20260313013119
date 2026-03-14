@@ -1,0 +1,203 @@
+import { supabase } from "@/lib/supabase";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) || "";
+
+function buildUrl(path, query) {
+  const url = new URL(API_BASE ? `${API_BASE}${path}` : path, window.location.origin);
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+  return url.toString();
+}
+
+function toInt(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toBoolOrNull(value) {
+  if (value === true || value === "true" || value === "ACTIVE" || value === "active") return true;
+  if (value === false || value === "false" || value === "INACTIVE" || value === "inactive") return false;
+  return null;
+}
+
+function normalizeSortOrder(value) {
+  return String(value || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+}
+
+async function callRpc(name, params, fallbackPage, fallbackPageSize) {
+  const { data, error } = await supabase.rpc(name, params);
+  if (error) throw new Error(error.message || `Failed to load ${name}.`);
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || fallbackPage),
+    pageSize: Number(data?.pageSize || fallbackPageSize),
+    summary: data?.summary || {},
+  };
+}
+
+async function rpcWaysCountReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_ways_count", params, params.p_page, params.p_page_size);
+}
+
+async function rpcWaysByMerchantsReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_ways_by_merchants", params, params.p_page, params.p_page_size);
+}
+
+async function rpcTotalWaysByTownReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+  };
+  return callRpc("api_report_total_ways_by_town", params, params.p_page, params.p_page_size);
+}
+
+async function rpcOverdueWaysCountReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "overdue_count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_overdue_ways_count", params, params.p_page, params.p_page_size);
+}
+
+async function rpcMerchantsReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "merchant_name"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder || "asc"),
+    p_search: query?.merchant || query?.search || null,
+    p_status: query?.status || null,
+  };
+  return callRpc("api_report_merchants", params, params.p_page, params.p_page_size);
+}
+
+async function rpcBranchesReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "branch_name"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder || "asc"),
+    p_search: query?.branch || query?.search || null,
+    p_is_active: toBoolOrNull(query?.status),
+  };
+  return callRpc("api_report_branches", params, params.p_page, params.p_page_size);
+}
+
+async function postJson(path, body) {
+  const url = API_BASE ? `${API_BASE}${path}` : path;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `POST failed with status ${response.status}`);
+  }
+  if (response.status === 204) return {};
+  return response.json();
+}
+
+export async function getJson(path, query) {
+  if (path === "/api/admin/reporting/ways-count-report") {
+    return rpcWaysCountReport(query);
+  }
+
+  if (path === "/api/admin/reporting/ways-by-merchants") {
+    return rpcWaysByMerchantsReport(query);
+  }
+
+  if (path === "/api/admin/reporting/total-ways-by-town") {
+    return rpcTotalWaysByTownReport(query);
+  }
+
+  if (path === "/api/admin/reporting/overdue-ways-count") {
+    return rpcOverdueWaysCountReport(query);
+  }
+
+  if (path === "/api/admin/merchants/list") {
+    return rpcMerchantsReport(query);
+  }
+
+  if (path === "/api/admin/teams/branches") {
+    return rpcBranchesReport(query);
+  }
+
+  const url = buildUrl(path, query);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return { items: [], total: 0, page: 1, pageSize: 20, summary: {} };
+  }
+
+  const data = await response.json();
+
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      page: Number(query?.page || 1),
+      pageSize: Number(query?.pageSize || 20),
+      summary: {},
+    };
+  }
+
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || query?.page || 1),
+    pageSize: Number(data?.pageSize || query?.pageSize || 20),
+    summary: data?.summary || {},
+  };
+}
+
+export { postJson };

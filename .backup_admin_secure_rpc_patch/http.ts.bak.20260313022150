@@ -1,0 +1,730 @@
+import { supabase } from "@/lib/supabase";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) || "";
+
+function buildUrl(path, query) {
+  const url = new URL(API_BASE ? `${API_BASE}${path}` : path, window.location.origin);
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+  return url.toString();
+}
+
+function toInt(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toBoolOrNull(value) {
+  if (value === true || value === "true" || value === "ACTIVE" || value === "active") return true;
+  if (value === false || value === "false" || value === "INACTIVE" || value === "inactive") return false;
+  return null;
+}
+
+function normalizeSortOrder(value) {
+  return String(value || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+}
+
+function emptyToNull(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  return value;
+}
+
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function getActorIdentity() {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) return "system";
+    const user = data?.user;
+    if (!user) return "system";
+    return user.email || user.id || "system";
+  } catch {
+    return "system";
+  }
+}
+
+async function callRpc(name, params, fallbackPage, fallbackPageSize) {
+  const { data, error } = await supabase.rpc(name, params);
+  if (error) throw new Error(error.message || `Failed to load ${name}.`);
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || fallbackPage),
+    pageSize: Number(data?.pageSize || fallbackPageSize),
+    summary: data?.summary || {},
+  };
+}
+
+async function listTable(table, query, options = {}) {
+  const page = toInt(query?.page, 1);
+  const pageSize = toInt(query?.pageSize, 20);
+  const from = Math.max((page - 1) * pageSize, 0);
+  const to = from + pageSize - 1;
+  const sortBy = String(query?.sortBy || options.defaultSortBy || "created_at");
+  const sortOrder = normalizeSortOrder(query?.sortOrder || options.defaultSortOrder || "desc");
+
+  let countQuery = supabase.from(table).select("*", { count: "exact", head: true });
+  let dataQuery = supabase.from(table).select(options.select || "*").range(from, to).order(sortBy, { ascending: sortOrder === "asc" });
+
+  const search = query?.search || query?.merchant || query?.deliveryman || query?.voucherNo || null;
+  const status = query?.status || null;
+  const dateFrom = query?.dateFrom || null;
+  const dateTo = query?.dateTo || null;
+
+  if (options.applyFilters) {
+    ({ countQuery, dataQuery } = options.applyFilters({ countQuery, dataQuery, query: { search, status, dateFrom, dateTo, raw: query } }));
+  }
+
+  const [{ count, error: countError }, { data, error: dataError }] = await Promise.all([countQuery, dataQuery]);
+
+  if (countError) throw new Error(countError.message || `Failed to count ${table}.`);
+  if (dataError) throw new Error(dataError.message || `Failed to load ${table}.`);
+
+  const rows = Array.isArray(data) ? data : [];
+  const summary = options.summary ? options.summary(rows, count || 0) : {};
+
+  return {
+    items: rows,
+    total: Number(count || 0),
+    page,
+    pageSize,
+    summary,
+  };
+}
+
+async function rpcWaysCountReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_ways_count", params, params.p_page, params.p_page_size);
+}
+
+async function rpcWaysByMerchantsReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_ways_by_merchants", params, params.p_page, params.p_page_size);
+}
+
+async function rpcTotalWaysByTownReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+  };
+  return callRpc("api_report_total_ways_by_town", params, params.p_page, params.p_page_size);
+}
+
+async function rpcOverdueWaysCountReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "overdue_count"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder),
+    p_date_from: query?.dateFrom || null,
+    p_date_to: query?.dateTo || null,
+    p_branch_id: query?.branch || null,
+    p_township: query?.township || null,
+    p_merchant_id: query?.merchant || null,
+  };
+  return callRpc("api_report_overdue_ways_count", params, params.p_page, params.p_page_size);
+}
+
+async function rpcMerchantsReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "merchant_name"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder || "asc"),
+    p_search: query?.merchant || query?.search || null,
+    p_status: query?.status || null,
+  };
+  return callRpc("api_report_merchants", params, params.p_page, params.p_page_size);
+}
+
+async function rpcBranchesReport(query) {
+  const params = {
+    p_page: toInt(query?.page, 1),
+    p_page_size: toInt(query?.pageSize, 20),
+    p_sort_by: String(query?.sortBy || "branch_name"),
+    p_sort_order: normalizeSortOrder(query?.sortOrder || "asc"),
+    p_search: query?.branch || query?.search || null,
+    p_is_active: toBoolOrNull(query?.status),
+  };
+  return callRpc("api_report_branches", params, params.p_page, params.p_page_size);
+}
+
+async function listDeliverymen(query) {
+  return listTable("deliverymen", query, {
+    defaultSortBy: "created_at",
+    applyFilters: ({ countQuery, dataQuery, query }) => {
+      if (query.search) {
+        countQuery = countQuery.or(`name.ilike.%${query.search}%,staff_code.ilike.%${query.search}%,phone.ilike.%${query.search}%`);
+        dataQuery = dataQuery.or(`name.ilike.%${query.search}%,staff_code.ilike.%${query.search}%,phone.ilike.%${query.search}%`);
+      }
+      if (query.status) {
+        countQuery = countQuery.eq("status", query.status);
+        dataQuery = dataQuery.eq("status", query.status);
+      }
+      if (query.dateFrom) {
+        countQuery = countQuery.gte("created_at", `${query.dateFrom}T00:00:00`);
+        dataQuery = dataQuery.gte("created_at", `${query.dateFrom}T00:00:00`);
+      }
+      if (query.dateTo) {
+        countQuery = countQuery.lte("created_at", `${query.dateTo}T23:59:59`);
+        dataQuery = dataQuery.lte("created_at", `${query.dateTo}T23:59:59`);
+      }
+      return { countQuery, dataQuery };
+    },
+    summary: (rows, total) => ({
+      deliverymanCount: total,
+      activeCount: rows.filter((r) => String(r.status || "").toUpperCase() === "ACTIVE").length,
+      inactiveCount: rows.filter((r) => String(r.status || "").toUpperCase() !== "ACTIVE").length,
+    }),
+  });
+}
+
+async function listJournalVouchers(query) {
+  return listTable("journal_vouchers", query, {
+    defaultSortBy: "voucher_date",
+    applyFilters: ({ countQuery, dataQuery, query }) => {
+      if (query.search) {
+        countQuery = countQuery.or(`voucher_no.ilike.%${query.search}%,reference_no.ilike.%${query.search}%,description.ilike.%${query.search}%`);
+        dataQuery = dataQuery.or(`voucher_no.ilike.%${query.search}%,reference_no.ilike.%${query.search}%,description.ilike.%${query.search}%`);
+      }
+      if (query.status) {
+        countQuery = countQuery.eq("status", query.status);
+        dataQuery = dataQuery.eq("status", query.status);
+      }
+      if (query.dateFrom) {
+        countQuery = countQuery.gte("voucher_date", query.dateFrom);
+        dataQuery = dataQuery.gte("voucher_date", query.dateFrom);
+      }
+      if (query.dateTo) {
+        countQuery = countQuery.lte("voucher_date", query.dateTo);
+        dataQuery = dataQuery.lte("voucher_date", query.dateTo);
+      }
+      return { countQuery, dataQuery };
+    },
+    summary: (rows, total) => ({
+      voucherCount: total,
+      amount: rows.reduce((sum, r) => sum + Number(r.debit || 0) + Number(r.credit || 0), 0),
+      pendingApprovalCount: rows.filter((r) => String(r.status || "").toUpperCase() === "PENDING_APPROVAL").length,
+      approvedCount: rows.filter((r) => String(r.status || "").toUpperCase() === "APPROVED").length,
+    }),
+  });
+}
+
+async function listCashVouchers(query) {
+  return listTable("cash_vouchers", query, {
+    defaultSortBy: "voucher_date",
+    applyFilters: ({ countQuery, dataQuery, query }) => {
+      if (query.search) {
+        countQuery = countQuery.or(`voucher_no.ilike.%${query.search}%,payee_name.ilike.%${query.search}%,description.ilike.%${query.search}%`);
+        dataQuery = dataQuery.or(`voucher_no.ilike.%${query.search}%,payee_name.ilike.%${query.search}%,description.ilike.%${query.search}%`);
+      }
+      if (query.status) {
+        countQuery = countQuery.eq("status", query.status);
+        dataQuery = dataQuery.eq("status", query.status);
+      }
+      if (query.dateFrom) {
+        countQuery = countQuery.gte("voucher_date", query.dateFrom);
+        dataQuery = dataQuery.gte("voucher_date", query.dateFrom);
+      }
+      if (query.dateTo) {
+        countQuery = countQuery.lte("voucher_date", query.dateTo);
+        dataQuery = dataQuery.lte("voucher_date", query.dateTo);
+      }
+      return { countQuery, dataQuery };
+    },
+    summary: (rows, total) => ({
+      voucherCount: total,
+      amount: rows.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+      pendingApprovalCount: rows.filter((r) => String(r.status || "").toUpperCase() === "PENDING_APPROVAL").length,
+      approvedCount: rows.filter((r) => String(r.status || "").toUpperCase() === "APPROVED").length,
+    }),
+  });
+}
+
+async function listBroadcastMessages(query) {
+  return listTable("broadcast_messages", query, {
+    defaultSortBy: "created_at",
+    applyFilters: ({ countQuery, dataQuery, query }) => {
+      if (query.search) {
+        countQuery = countQuery.or(`message_title.ilike.%${query.search}%,message_body.ilike.%${query.search}%`);
+        dataQuery = dataQuery.or(`message_title.ilike.%${query.search}%,message_body.ilike.%${query.search}%`);
+      }
+      if (query.status) {
+        countQuery = countQuery.eq("status", query.status);
+        dataQuery = dataQuery.eq("status", query.status);
+      }
+      if (query.raw?.channel) {
+        countQuery = countQuery.eq("channel", query.raw.channel);
+        dataQuery = dataQuery.eq("channel", query.raw.channel);
+      }
+      if (query.dateFrom) {
+        countQuery = countQuery.gte("created_at", `${query.dateFrom}T00:00:00`);
+        dataQuery = dataQuery.gte("created_at", `${query.dateFrom}T00:00:00`);
+      }
+      if (query.dateTo) {
+        countQuery = countQuery.lte("created_at", `${query.dateTo}T23:59:59`);
+        dataQuery = dataQuery.lte("created_at", `${query.dateTo}T23:59:59`);
+      }
+      return { countQuery, dataQuery };
+    },
+    summary: (rows, total) => ({
+      messageCount: total,
+      readyCount: rows.filter((r) => String(r.status || "").toUpperCase() === "READY").length,
+      draftCount: rows.filter((r) => String(r.status || "").toUpperCase() === "DRAFT").length,
+      pendingApprovalCount: rows.filter((r) => String(r.status || "").toUpperCase() === "PENDING_APPROVAL").length,
+      approvedCount: rows.filter((r) => String(r.status || "").toUpperCase() === "APPROVED").length,
+    }),
+  });
+}
+
+async function insertInto(table, payload) {
+  const { data, error } = await supabase.from(table).insert(payload).select().single();
+  if (error) throw new Error(error.message || `Insert failed for ${table}.`);
+  return data || {};
+}
+
+async function updateById(table, id, payload) {
+  const { data, error } = await supabase.from(table).update(payload).eq("id", id).select().single();
+  if (error) throw new Error(error.message || `Update failed for ${table}.`);
+  return data || {};
+}
+
+async function setStatusById(table, id, patch) {
+  const { data, error } = await supabase.from(table).update(patch).eq("id", id).select().single();
+  if (error) throw new Error(error.message || `Status update failed for ${table}.`);
+  return data || {};
+}
+
+async function postCreateDelivery(body) {
+  return insertInto("shipments", {
+    tracking_number: emptyToNull(body.tracking_number),
+    merchant_id: emptyToNull(body.merchant_id),
+    sender_name: emptyToNull(body.sender_name),
+    sender_phone: emptyToNull(body.sender_phone),
+    customer_name: emptyToNull(body.customer_name),
+    phone: emptyToNull(body.phone),
+    address: emptyToNull(body.address),
+    cod_amount: toNumberOrNull(body.cod_amount),
+    weight: toNumberOrNull(body.weight),
+    delivery_fee: toNumberOrNull(body.delivery_fee),
+    status: emptyToNull(body.status) || "PENDING",
+    type: emptyToNull(body.type) || "STANDARD",
+  });
+}
+
+async function postAddMerchant(body) {
+  return insertInto("merchants_2026_02_18_17_00", {
+    merchant_code: emptyToNull(body.merchant_code),
+    business_name: emptyToNull(body.business_name),
+    contact_person: emptyToNull(body.contact_person),
+    email: emptyToNull(body.email),
+    phone: emptyToNull(body.phone),
+    business_address: emptyToNull(body.business_address),
+    business_type: emptyToNull(body.business_type),
+    registration_date: emptyToNull(body.registration_date),
+    pickup_preferences: emptyToNull(body.pickup_preferences),
+    payment_terms: emptyToNull(body.payment_terms),
+    status: emptyToNull(body.status) || "ACTIVE",
+  });
+}
+
+async function postAddDeliveryman(body) {
+  return insertInto("deliverymen", {
+    staff_code: emptyToNull(body.staff_code),
+    name: emptyToNull(body.name),
+    phone: emptyToNull(body.phone),
+    email: emptyToNull(body.email),
+    branch_id: emptyToNull(body.branch_id),
+    vehicle_type: emptyToNull(body.vehicle_type),
+    license_no: emptyToNull(body.license_no),
+    status: emptyToNull(body.status) || "ACTIVE",
+  });
+}
+
+async function postJournalVoucher(body) {
+  return insertInto("journal_vouchers", {
+    voucher_no: emptyToNull(body.voucher_no),
+    voucher_date: emptyToNull(body.voucher_date),
+    description: emptyToNull(body.description),
+    account_code: emptyToNull(body.account_code),
+    debit: toNumberOrNull(body.debit),
+    credit: toNumberOrNull(body.credit),
+    reference_no: emptyToNull(body.reference_no),
+    status: emptyToNull(body.status) || "DRAFT",
+  });
+}
+
+async function postCashVoucher(body) {
+  return insertInto("cash_vouchers", {
+    voucher_no: emptyToNull(body.voucher_no),
+    voucher_date: emptyToNull(body.voucher_date),
+    payee_name: emptyToNull(body.payee_name),
+    amount: toNumberOrNull(body.amount),
+    description: emptyToNull(body.description),
+    account_code: emptyToNull(body.account_code),
+    status: emptyToNull(body.status) || "DRAFT",
+  });
+}
+
+async function postBroadcastMessage(body) {
+  return insertInto("broadcast_messages", {
+    message_title: emptyToNull(body.message_title),
+    channel: emptyToNull(body.channel),
+    audience: emptyToNull(body.audience),
+    message_body: emptyToNull(body.message_body),
+    media_url: emptyToNull(body.media_url),
+    schedule_at: emptyToNull(body.schedule_at),
+    status: emptyToNull(body.status) || "DRAFT",
+  });
+}
+
+async function updateDeliveryman(body) {
+  return updateById("deliverymen", body.id, {
+    staff_code: emptyToNull(body.staff_code),
+    name: emptyToNull(body.name),
+    phone: emptyToNull(body.phone),
+    email: emptyToNull(body.email),
+    branch_id: emptyToNull(body.branch_id),
+    vehicle_type: emptyToNull(body.vehicle_type),
+    license_no: emptyToNull(body.license_no),
+    status: emptyToNull(body.status) || "ACTIVE",
+  });
+}
+
+async function updateJournalVoucher(body) {
+  return updateById("journal_vouchers", body.id, {
+    voucher_no: emptyToNull(body.voucher_no),
+    voucher_date: emptyToNull(body.voucher_date),
+    description: emptyToNull(body.description),
+    account_code: emptyToNull(body.account_code),
+    debit: toNumberOrNull(body.debit),
+    credit: toNumberOrNull(body.credit),
+    reference_no: emptyToNull(body.reference_no),
+    status: emptyToNull(body.status) || "DRAFT",
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function updateCashVoucher(body) {
+  return updateById("cash_vouchers", body.id, {
+    voucher_no: emptyToNull(body.voucher_no),
+    voucher_date: emptyToNull(body.voucher_date),
+    payee_name: emptyToNull(body.payee_name),
+    amount: toNumberOrNull(body.amount),
+    description: emptyToNull(body.description),
+    account_code: emptyToNull(body.account_code),
+    status: emptyToNull(body.status) || "DRAFT",
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function updateBroadcastMessage(body) {
+  return updateById("broadcast_messages", body.id, {
+    message_title: emptyToNull(body.message_title),
+    channel: emptyToNull(body.channel),
+    audience: emptyToNull(body.audience),
+    message_body: emptyToNull(body.message_body),
+    media_url: emptyToNull(body.media_url),
+    schedule_at: emptyToNull(body.schedule_at),
+    status: emptyToNull(body.status) || "DRAFT",
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function archiveDeliveryman(body) {
+  return setStatusById("deliverymen", body.id, { status: "INACTIVE" });
+}
+
+async function archiveJournalVoucher(body) {
+  return setStatusById("journal_vouchers", body.id, { status: "VOID" });
+}
+
+async function archiveCashVoucher(body) {
+  return setStatusById("cash_vouchers", body.id, { status: "VOID" });
+}
+
+async function archiveBroadcastMessage(body) {
+  return setStatusById("broadcast_messages", body.id, { status: "ARCHIVED" });
+}
+
+async function restoreDeliveryman(body) {
+  return setStatusById("deliverymen", body.id, { status: "ACTIVE" });
+}
+
+async function restoreJournalVoucher(body) {
+  return setStatusById("journal_vouchers", body.id, {
+    status: "DRAFT",
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function restoreCashVoucher(body) {
+  return setStatusById("cash_vouchers", body.id, {
+    status: "DRAFT",
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function restoreBroadcastMessage(body) {
+  return setStatusById("broadcast_messages", body.id, {
+    status: "DRAFT",
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function submitJournalVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("journal_vouchers", body.id, {
+    status: "PENDING_APPROVAL",
+    submitted_by: actor,
+    submitted_at: new Date().toISOString(),
+    approved_by: null,
+    approved_at: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function approveJournalVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("journal_vouchers", body.id, {
+    status: "APPROVED",
+    approved_by: actor,
+    approved_at: new Date().toISOString(),
+  });
+}
+
+async function rejectJournalVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("journal_vouchers", body.id, {
+    status: "REJECTED",
+    rejected_by: actor,
+    rejected_at: new Date().toISOString(),
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function submitCashVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("cash_vouchers", body.id, {
+    status: "PENDING_APPROVAL",
+    submitted_by: actor,
+    submitted_at: new Date().toISOString(),
+    approved_by: null,
+    approved_at: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function approveCashVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("cash_vouchers", body.id, {
+    status: "APPROVED",
+    approved_by: actor,
+    approved_at: new Date().toISOString(),
+  });
+}
+
+async function rejectCashVoucher(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("cash_vouchers", body.id, {
+    status: "REJECTED",
+    rejected_by: actor,
+    rejected_at: new Date().toISOString(),
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function submitBroadcastMessage(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("broadcast_messages", body.id, {
+    status: "PENDING_APPROVAL",
+    submitted_by: actor,
+    submitted_at: new Date().toISOString(),
+    approved_by: null,
+    approved_at: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
+  });
+}
+
+async function approveBroadcastMessage(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("broadcast_messages", body.id, {
+    status: "APPROVED",
+    approved_by: actor,
+    approved_at: new Date().toISOString(),
+  });
+}
+
+async function rejectBroadcastMessage(body) {
+  const actor = await getActorIdentity();
+  return setStatusById("broadcast_messages", body.id, {
+    status: "REJECTED",
+    rejected_by: actor,
+    rejected_at: new Date().toISOString(),
+    rejection_reason: emptyToNull(body.rejection_reason),
+  });
+}
+
+async function patchJson(path, body) {
+  if (path === "/api/admin/deliverymen/update") return updateDeliveryman(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-update") return updateJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-update") return updateCashVoucher(body);
+  if (path === "/api/admin/broadcast-message/update-message") return updateBroadcastMessage(body);
+
+  if (path === "/api/admin/deliverymen/archive") return archiveDeliveryman(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-archive") return archiveJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-archive") return archiveCashVoucher(body);
+  if (path === "/api/admin/broadcast-message/archive-message") return archiveBroadcastMessage(body);
+
+  if (path === "/api/admin/deliverymen/restore") return restoreDeliveryman(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-restore") return restoreJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-restore") return restoreCashVoucher(body);
+  if (path === "/api/admin/broadcast-message/restore-message") return restoreBroadcastMessage(body);
+
+  if (path === "/api/admin/accounting/transactions/journal-voucher-submit") return submitJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-approve") return approveJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-reject") return rejectJournalVoucher(body);
+
+  if (path === "/api/admin/accounting/transactions/cash-voucher-submit") return submitCashVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-approve") return approveCashVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-reject") return rejectCashVoucher(body);
+
+  if (path === "/api/admin/broadcast-message/submit-message") return submitBroadcastMessage(body);
+  if (path === "/api/admin/broadcast-message/approve-message") return approveBroadcastMessage(body);
+  if (path === "/api/admin/broadcast-message/reject-message") return rejectBroadcastMessage(body);
+
+  const url = API_BASE ? `${API_BASE}${path}` : path;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `PATCH failed with status ${response.status}`);
+  }
+  if (response.status === 204) return {};
+  return response.json();
+}
+
+async function postJson(path, body) {
+  if (path === "/api/admin/create-delivery") return postCreateDelivery(body);
+  if (path === "/api/admin/merchants/add-new") return postAddMerchant(body);
+  if (path === "/api/admin/deliverymen/add-new") return postAddDeliveryman(body);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-entry") return postJournalVoucher(body);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-entry") return postCashVoucher(body);
+  if (path === "/api/admin/broadcast-message/create-message") return postBroadcastMessage(body);
+
+  const url = API_BASE ? `${API_BASE}${path}` : path;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `POST failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) return {};
+  return response.json();
+}
+
+async function getJson(path, query) {
+  if (path === "/api/admin/reporting/ways-count-report") return rpcWaysCountReport(query);
+  if (path === "/api/admin/reporting/ways-by-merchants") return rpcWaysByMerchantsReport(query);
+  if (path === "/api/admin/reporting/total-ways-by-town") return rpcTotalWaysByTownReport(query);
+  if (path === "/api/admin/reporting/overdue-ways-count") return rpcOverdueWaysCountReport(query);
+  if (path === "/api/admin/merchants/list") return rpcMerchantsReport(query);
+  if (path === "/api/admin/teams/branches") return rpcBranchesReport(query);
+  if (path === "/api/admin/deliverymen/list") return listDeliverymen(query);
+  if (path === "/api/admin/accounting/transactions/journal-voucher-list") return listJournalVouchers(query);
+  if (path === "/api/admin/accounting/transactions/cash-voucher-list") return listCashVouchers(query);
+  if (path === "/api/admin/broadcast-message/message-list") return listBroadcastMessages(query);
+
+  const url = buildUrl(path, query);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return { items: [], total: 0, page: 1, pageSize: 20, summary: {} };
+  }
+
+  const data = await response.json();
+
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      page: Number(query?.page || 1),
+      pageSize: Number(query?.pageSize || 20),
+      summary: {},
+    };
+  }
+
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    total: Number(data?.total || 0),
+    page: Number(data?.page || query?.page || 1),
+    pageSize: Number(data?.pageSize || query?.pageSize || 20),
+    summary: data?.summary || {},
+  };
+}
+
+export { getJson, postJson, patchJson };

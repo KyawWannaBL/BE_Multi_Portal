@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🛠️  Rewriting src/services/supplyChain.ts safely (EN/MM)..."
+mkdir -p src/services
+
+# Backup (EN: keep old file, MY: အဟောင်းကို backup သိမ်း)
+if [ -f src/services/supplyChain.ts ]; then
+  cp -f src/services/supplyChain.ts "src/services/supplyChain.ts.bak.$(date +%Y%m%d_%H%M%S)" || true
+fi
+
+cat > src/services/supplyChain.ts <<'EOF'
+// @ts-nocheck
+/**
+ * Supply Chain Service (EN/MM)
+ * ----------------------------------------------------------------------------
+ * EN: Build-stable stubs. Replace with real Supabase/RPC logic later.
+ * MY: Build မပျက်အောင် stub များ။ နောက်မှ Supabase/RPC logic နဲ့ အစားထိုးနိုင်။
+ */
+
+export type SupplyEvent = {
+  id?: string;
+  way_id?: string;
+  shipment_id?: string;
+  event_type?: string;
+  notes?: string;
+  at?: string;
+  meta?: any;
+};
+
+export type CodItem = {
+  way_id: string;
+  shipment_id?: string;
+  cod_amount?: number;
+  status?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_city?: string;
+};
+
+/** EN: Trace events by Waybill ID | MY: Waybill ID အလိုက် events ရယူမည် */
+export async function traceByWayId(wayId: any): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] traceByWayId:", wayId);
+  return [];
+}
+
+/** EN: Finance reconcile pending COD | MY: pending COD စာရင်း */
+export async function listPendingCod(...args: any[]): Promise<CodItem[]> {
+  console.log("[supplyChain] listPendingCod:", args);
+  return [];
+}
+
+/** EN: Create deposit | MY: Deposit ဖန်တီးမည် */
+export async function createDeposit(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createDeposit:", args);
+  return { success: true, id: `dep_${Date.now()}` };
+}
+
+/** EN: Create COD collection | MY: COD collection ဖန်တီးမည် */
+export async function createCodCollection(...args: any[]): Promise<{ success: boolean; id?: string }> {
+  console.log("[supplyChain] createCodCollection:", args);
+  return { success: true, id: `cod_${Date.now()}` };
+}
+
+/** EN: Record supply event | MY: supply event မှတ်တမ်းတင်မည် */
+export async function recordSupplyEvent(...args: any[]): Promise<{ success: boolean }> {
+  console.log("[supplyChain] recordSupplyEvent:", args);
+  return { success: true };
+}
+
+/** ✅ EN: Used by QROpsConsole.tsx | ✅ MY: QROpsConsole မှာ သုံး */
+export async function listMyRecentEvents(...args: any[]): Promise<SupplyEvent[]> {
+  console.log("[supplyChain] listMyRecentEvents:", args);
+  return [];
+}
+
+/** EN/MM: Compatibility aliases (legacy imports) */
+export const listPendingCOD = listPendingCod;
+export const recordEvent = recordSupplyEvent;
+export const listRecentEvents = listMyRecentEvents;
+
+export default {
+  traceByWayId,
+  listPendingCod,
+  createDeposit,
+  createCodCollection,
+  recordSupplyEvent,
+  listMyRecentEvents,
+};
+EOF
+
+echo "🔍 Quick sanity check (first 20 lines):"
+sed -n '1,20p' src/services/supplyChain.ts
+
+echo "✅ supplyChain.ts rewritten cleanly."

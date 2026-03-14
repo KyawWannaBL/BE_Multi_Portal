@@ -1,0 +1,58 @@
+// @ts-nocheck
+/**
+ * Shipments Service (EN/MM)
+ * EN: Build-stable stubs used by Execution/Warehouse/Operations pages.
+ * MY: Execution/Warehouse/Operations မျက်နှာပြင်တွေ build မပျက်အောင် stub များ။
+ */
+
+export type Shipment = {
+  id?: string;
+  way_id?: string;
+  status?: string;
+  sender_name?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_address?: string;
+  receiver_city?: string;
+  cod_amount?: number;
+  delivery_fee?: number;
+  updated_at?: string;
+  meta?: any;
+};
+
+export async function listAssignedShipments(...args): Promise<Shipment[]> {
+  console.log("[shipments] listAssignedShipments:", args);
+  return [];
+}
+
+export async function markPickedUp(wayId: string, payload?: any): Promise<{ success: boolean }> {
+  console.log("[shipments] markPickedUp:", wayId, payload);
+  return { success: true };
+}
+
+export async function markOutForDelivery(wayId: string, payload?: any): Promise<{ success: boolean }> {
+  console.log("[shipments] markOutForDelivery:", wayId, payload);
+  return { success: true };
+}
+
+export async function markDelivered(wayId: string, payload?: any): Promise<{ success: boolean }> {
+  console.log("[shipments] markDelivered:", wayId, payload);
+  return { success: true };
+}
+
+export async function markFailed(wayId: string, payload?: any): Promise<{ success: boolean }> {
+  console.log("[shipments] markFailed:", wayId, payload);
+  return { success: true };
+}
+
+/** EN/MM: compat aliases */
+export const markPickUp = markPickedUp;
+export const markDelivery = markDelivered;
+
+export default {
+  listAssignedShipments,
+  markPickedUp,
+  markOutForDelivery,
+  markDelivered,
+  markFailed,
+};
